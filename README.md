@@ -103,6 +103,23 @@ mail-harbor/
 
 
 
+
+## Windows 虚拟机 / 真机验收（一键脚本）
+
+安装包：<https://github.com/moneyfly006/mailharbor/releases/latest>（`MailHarbor-Setup-*.exe`）
+
+1. 把安装包和 `scripts/windows/` 里的两个文件一起放进 Windows；
+2. 双击 **`一键安装并测试.bat`**（或右键 PowerShell 运行 `install-and-test.ps1`）；
+3. 脚本会：静默安装 → 运行 `--self-check` 自检 → 启动界面 → 把结果写到**
+   桌面 `MailHarbor-测试结果.txt`**（版本、数据目录、预置的三条标题规则与路径、代理模式）。
+
+也可以在命令行手动自检（不需要界面，适合远程排障）：
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\MailHarbor\MailHarbor.exe" --self-check "$env:TEMP\mh.json"
+type "$env:TEMP\mh.json"
+```
+
 ## 邮箱兼容性（实测）
 
 | 邮箱 / 服务 | 收信 | 回信 | 说明 |

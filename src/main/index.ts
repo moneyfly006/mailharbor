@@ -55,6 +55,17 @@ async function bootstrap(): Promise<void> {
     console.error('[main] backend init failed:', e)
   }
 
+  // --self-check：装机自检（写 JSON 到指定路径后退出），用于远程/虚拟机验收
+  const selfCheckIdx = process.argv.indexOf('--self-check')
+  if (selfCheckIdx >= 0) {
+    const outPath = process.argv[selfCheckIdx + 1] && !process.argv[selfCheckIdx + 1].startsWith('--')
+      ? process.argv[selfCheckIdx + 1]
+      : join(app.getPath('temp'), 'mailharbor-selfcheck.json')
+    await runSelfCheck(outPath)
+    app.exit(0)
+    return
+  }
+
   updater = createUpdater({
     window: () => mainWindow,
     broadcast: (state) => broadcast({ type: 'update:changed', state })
@@ -91,6 +102,40 @@ async function bootstrap(): Promise<void> {
   powerMonitor.on('unlock-screen', () => {
     void backend?.scheduler.checkNow()
   })
+}
+
+/** 装机自检：不需要界面，输出关键状态，便于 Windows 虚拟机/远程验收 */
+async function runSelfCheck(outPath: string): Promise<void> {
+  try {
+    const { writeFileSync } = await import('node:fs')
+    const { openDb, getDbPath, getSetting } = await import('./db')
+    const repos = await import('./repos')
+    openDb()
+    const rules = repos.listRules()
+    const accounts = repos.listAccounts()
+    const report = {
+      ok: true,
+      checkedAt: new Date().toISOString(),
+      version: app.getVersion(),
+      electron: process.versions.electron,
+      node: process.versions.node,
+      platform: process.platform,
+      arch: process.arch,
+      userData: app.getPath('userData'),
+      dbPath: getDbPath(),
+      proxy: getSetting('proxy'),
+      listen: { started: true },
+      rules: rules.map((r) => ({ keyword: r.keyword, enabled: r.enabled, mode: r.mode, scope: r.scope, paths: r.targets.map((t) => t.path) })),
+      accounts: accounts.map((a) => ({ email: a.email, sendOnly: a.sendOnly, status: a.status }))
+    }
+    writeFileSync(outPath, JSON.stringify(report, null, 2), 'utf8')
+    console.log('[self-check] 已写入', outPath)
+    console.log(JSON.stringify(report, null, 2))
+  } catch (e) {
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(outPath, JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }, null, 2), 'utf8')
+    console.error('[self-check] 失败', e)
+  }
 }
 
 function startAutostartArgs(): void {
