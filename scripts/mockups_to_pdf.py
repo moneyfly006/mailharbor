@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "design" / "exports"
-OUT = SRC / "MailHarbor-设计说明书.pdf"
+OUT = ROOT / "docs" / "邮箱资料助手-设计说明书.pdf"
 
 PAGES = [
     ("01-dashboard", "概览 · 今天有没有在干活",
@@ -51,7 +51,7 @@ HTML = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
             font-size:7.6pt; color:#A6ADB5; letter-spacing:.08em; padding-top:1.5mm; }}
 </style></head><body>
 <div class="page cover">
-  <div class="kicker">MAILHARBOR · 邮件收货助手</div>
+  <div class="kicker">邮箱资料助手 · E-MAIL ARTWORK ARCHIVER</div>
   <h1>客户发来的图稿，<br>自己<em>落进该去的文件夹</em>。</h1>
   <div class="sub">Windows 桌面软件高保真设计图（v0.3）。通过 <b>IMAP 收信</b> 盯住工厂邮箱 → 按邮件标题关键词判断是否入库 → 把 ZIP / TIF 附件复制到一个或多个本地文件夹 → 通过 <b>SMTP 回信</b>告诉客户「已收到」。不上传任何图稿，密码只存在本机。</div>
   <div class="meta">版本 v0.3（关键词规则 · 一文件多路径 · IMAP/SMTP 收信发信）· 2026-11-22 · {n} 屏 · 设计基准 1440×900</div>
@@ -63,7 +63,7 @@ PAGE = """<div class="page">
   <div class="phead"><span class="pnum">{num}</span><h2>{title}</h2></div>
   <p class="desc">{desc}</p>
   <div class="shotwrap"><img src="{src}" alt="{title}"></div>
-  <div class="pfoot"><span>MailHarbor · 设计说明书 v0.3</span><span>{num} / {total}</span></div>
+  <div class="pfoot"><span>邮箱资料助手 · 设计说明书 v0.3</span><span>{num} / {total}</span></div>
 </div>"""
 
 

@@ -1,25 +1,21 @@
 # 邮箱资料助手（MailHarbor）
 
-> 给 POD（按需印刷定制）工厂用的 Windows 桌面软件「**邮箱资料助手**」（代码仓库名 mailharbor）：
-> **IMAP 收信 → 按邮件标题关键词（如「原图+卡套」）判断要不要存 → 把 ZIP/TIF 附件复制到该关键词对应的一个或多个本地文件夹 → SMTP 回信告诉客户"已收到"。**
+> 给 POD（按需印刷定制）工厂用的 Windows 桌面软件：**客户邮件里的图稿，自动落进该去的文件夹，并自动回信。**
+> 代码仓库名沿用 `mailharbor`，安装后的软件名是中文的「**邮箱资料助手**」。
 
-```
-客户发邮件（标题「原图+卡套」，附件 POD_ORDER_20486.zip）
-        │
-        ▼
-  ┌──────────────────────────────┐
-  │  MailHarbor（托盘常驻 / 开机自启）│
-  │  1. IMAP 收新邮件（IDLE+轮询）  │
-  │  2. 标题命中关键词规则          │
-  │  3. 附件扇出复制 → N 个路径     │
-  │  4. 全部必达路径成功 → 回信     │
-  │  5. 写记录 / 托盘通知          │
-  └──────────────────────────────┘
-        │
-        ▼
-D:\POD\生产\卡套\POD_ORDER_20486.zip  ✔
-E:\POD\备份\卡套\POD_ORDER_20486.zip  ✔
-```
+![应用图标](docs/assets/icon-preview.png)
+
+| 项 | 内容 |
+| --- | --- |
+| 最新版本 | v0.1.10（自动更新已启用） |
+| 安装包 | [MailHarbor-Setup-0.1.10.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
+| macOS | [dmg / zip](https://github.com/moneyfly006/mailharbor/releases/latest)（arm64 + x64） |
+| 设计说明 PDF | [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf)（6 屏高保真设计图 + 说明） |
+| 需求 / 技术 | [需求规格](docs/REQUIREMENTS.md) · [产品说明](docs/PRODUCT.md) · [技术架构](docs/ARCHITECTURE.md) · [成本估算](docs/COST.md) |
+
+**安装路径可以自己选**：安装包是多步向导（不是一键静默装），会出现「选择安装位置」这一步，默认装在
+`%LOCALAPPDATA%\Programs\邮箱资料助手`（按当前用户安装，**不需要管理员权限**），你可以改成 `D:\软件\邮箱资料助手` 等任意目录。
+装完桌面会生成「**邮箱资料助手**」快捷方式（朱红信封图标），开始菜单同名入口；卸载时会保留邮件记录与配置。
 
 ## 当前进度
 
@@ -32,8 +28,8 @@ E:\POD\备份\卡套\POD_ORDER_20486.zip  ✔
 | 3. 可点击原型（HTML demo） | ⏳ 待客户确认设计后 | `design/prototype/` |
 | 4. 应用开发（Electron + Windows 打包） | ✅ **MVP 已完成** | `src/`（19.8k 行，双端 typecheck + build 通过） |
 | 5. 本地联调（模拟 IMAP/SMTP 服务器） | ✅ 完成 | `scripts/mock-mail-server.mjs`，e2e 69 断言全过 |
-| 6. **Windows 安装包** | ✅ **已产出** | `release/MailHarbor-Setup-0.1.0.exe`（117 MB，见 [构建说明](docs/BUILD-WINDOWS.md)） |
-| 7. 真机验收（Windows） | ⏳ 需一台 Windows 机器 | 安装→自启→真实邮箱收发 |
+| 6. **Windows 安装包** | ✅ **已产出并持续自动构建** | GitHub Releases（可自选安装路径、桌面快捷方式、自动更新） |
+| 7. 真机验收（Windows） | 🚧 进行中 | 一键安装自检脚本 `scripts/windows/` |
 
 **工期估算**：34–36 人天（含 15% 缓冲 39–41 人天）；2 人并行约 5 周，1 人约 8–9 周。其中「IMAP 收信 + 中文文件名解析 + 规则引擎 + 多路径扇出 + 部分失败恢复」单列 14–16 人天，是最大复杂点。
 
@@ -178,7 +174,11 @@ type "$env:TEMP\mh.json"
 
 ## Windows 安装包
 
-**产物**：`release/MailHarbor-Setup-0.1.0.exe`（NSIS，x64，按用户安装、免管理员，117 MB）
+**产物**：GitHub Releases 里的 `MailHarbor-Setup-*.exe`（NSIS 多步向导，x64，按用户安装、免管理员）
+
+- 安装向导第 2 步可以**自选安装目录**（`allowToChangeInstallationDirectory`）
+- 桌面 / 开始菜单快捷方式名：**邮箱资料助手**，图标为朱红信封
+- 旧版 `MailHarbor` 请先卸载，避免新旧目录并存
 
 ```bash
 # 已构建好；重新构建：
