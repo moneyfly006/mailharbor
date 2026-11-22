@@ -64,9 +64,28 @@ jobs:
           echo "version=$NEW" >> $GITHUB_OUTPUT
           echo "新版本：$NEW"
 
+  create-release:
+    name: 创建 Release
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 创建/更新 GitHub Release（唯一入口，避免矩阵并发建出重复 release）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          TAG="${{ needs.version.outputs.tag }}"
+          VERSION="${{ needs.version.outputs.version }}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "MailHarbor v$VERSION" --generate-notes \
+              --notes "自动构建：Windows 安装包 + macOS (arm64/x64) 安装包。\n\n已安装旧版本的用户会在启动后自动升级。"
+          echo "release $TAG 就绪"
+
   build:
     name: 构建 ${{ matrix.name }}
-    needs: version
+    needs: [version, create-release]
     strategy:
       fail-fast: false
       matrix:
@@ -102,18 +121,32 @@ jobs:
       - name: 构建主进程/渲染层
         run: pnpm exec electron-vite build
 
-      - name: 打包并发布（Windows）
+      - name: 打包（Windows）
         if: matrix.platform == 'win'
-        run: pnpm exec electron-builder --win nsis --x64 --publish always
+        run: pnpm exec electron-builder --win nsis --x64 --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 打包并发布（macOS）
-        if: matrix.platform == 'mac'
-        run: pnpm exec electron-builder --mac --arm64 --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: 打包（macOS）
+        if: matrix.platform == 'mac'
+        run: pnpm exec electron-builder --mac --arm64 --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: 上传到 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          TAG="${{ needs.version.outputs.tag }}"
+          shopt -s nullglob
+          FILES=(release/*.exe release/*.dmg release/*.zip release/latest*.yml release/*.blockmap)
+          for f in "${FILES[@]}"; do
+            [ -e "$f" ] || continue
+            gh release upload "$TAG" "$f" --clobber
+          done
+          echo "已上传 $((${#FILES[@]})) 个文件到 $TAG"
 
       - name: 上传产物（便于手动下载）
         uses: actions/upload-artifact@v4
