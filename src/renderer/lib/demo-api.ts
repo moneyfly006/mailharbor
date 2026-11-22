@@ -78,6 +78,8 @@ export function createDemoApi(): Api {
       smtpUser: input.smtpUser,
       smtpFromName: input.smtpFromName ?? prev?.smtpFromName ?? 'Haiyin POD · Prepress',
       smtpSameAsImap: input.smtpSameAsImap,
+    allowSelfSigned: !!input.allowSelfSigned,
+    sendOnly: !!input.sendOnly,
       hasPassword: !!input.password || !!prev?.hasPassword,
       lastCheckAt: prev?.lastCheckAt ?? null,
       lastOkAt: prev?.lastOkAt ?? null,

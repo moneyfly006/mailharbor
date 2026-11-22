@@ -1013,3 +1013,24 @@
   color: var(--color-text-quaternary);
   line-height: 1.6;
 }
+
+/* 仅发件 / 自签名开关行 */
+.sendonly-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 0 3px;
+  border-top: 1px dotted var(--color-rule-dotted, rgba(22, 32, 43, 0.14));
+}
+
+.sendonly-row .lbl {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+}
+
+.sendonly-row .sub {
+  font-size: 10px;
+  color: var(--color-text-quaternary);
+  line-height: 1.55;
+  margin-top: 1px;
+}

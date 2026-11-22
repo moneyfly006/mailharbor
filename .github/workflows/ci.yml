@@ -21,3 +21,7 @@ jobs:
       - run: pnpm test:core
       - run: pnpm test:seed
       - run: pnpm test:sqlite
+      - name: 多邮箱兼容性（自签名 / STARTTLS / 仅发件）
+        run: |
+          pnpm exec electron-vite build
+          xvfb-run --auto-servernum pnpm test:providers

@@ -250,15 +250,28 @@ export class ReplyService {
       if (wait > 0) await sleep(wait)
       if (this.disposed) return
 
-      const secrets = this.deps.getSecrets(account.id)
+      // 允许把「回信」交给另一个发件账户（例如收件用 Gmail/QQ，回信用企业域名邮箱）
+      const configuredSenderId = Number(this.deps.getSetting<number | null>('replyAccountId') ?? 0) || 0
+      const senderAccount =
+        configuredSenderId && configuredSenderId !== account.id ? repos.getAccount(configuredSenderId) : null
+      const sendAs = senderAccount && senderAccount.enabled ? senderAccount : account
+      const secrets = this.deps.getSecrets(sendAs.id)
+      const proxyRaw = this.deps.getSetting<{ mode?: string; host?: string; port?: number }>('proxy')
       const cfg: SmtpConfig = {
-        host: account.smtpHost,
-        port: account.smtpPort,
-        secure: account.smtpSecure,
-        user: account.smtpUser,
-        pass: secrets.smtpPass
+        host: sendAs.smtpHost,
+        port: sendAs.smtpPort,
+        secure: sendAs.smtpSecure,
+        user: sendAs.smtpUser,
+        pass: secrets.smtpPass,
+        // 企业自建服务器常用自签名证书；与收信共用同一个开关
+        allowSelfSigned: !!sendAs.allowSelfSigned,
+        proxy: {
+          mode: ((proxyRaw?.mode ?? 'system') as 'none' | 'system' | 'socks5' | 'http'),
+          host: String(proxyRaw?.host ?? '127.0.0.1'),
+          port: Number(proxyRaw?.port ?? 7890)
+        }
       }
-      const request = this.buildRequest(account, msg, settings)
+      const request = this.buildRequest(sendAs, msg, settings)
       if (!request) {
         repos.updateMessageReplyStatus(messageId, 'suppressed', '找不到可回信的发件人地址')
         this.emitRecord(messageId)

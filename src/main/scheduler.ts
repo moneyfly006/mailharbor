@@ -232,7 +232,8 @@ export class Scheduler {
 
   // ---------------- 内部 ----------------
   private syncWorkers(): void {
-    const accounts = repos.listAccounts().filter((a) => a.enabled && a.status !== 'disabled')
+    // 「仅发件」账户（如阿里云 DirectMail）没有收件箱，不参与收信调度
+    const accounts = repos.listAccounts().filter((a) => a.enabled && a.status !== 'disabled' && !a.sendOnly)
     const alive = new Set(accounts.map((a) => a.id))
     for (const [id, worker] of this.workers) {
       if (!alive.has(id)) {

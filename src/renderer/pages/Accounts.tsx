@@ -56,6 +56,8 @@ interface FormState {
   smtpSecure: Encryption
   smtpUser: string
   smtpSameAsImap: boolean
+  sendOnly: boolean
+  allowSelfSigned: boolean
   password: string
   smtpPassword: string
 }
@@ -76,6 +78,8 @@ function blankForm(demo: boolean): FormState {
     smtpSecure: preset.smtpSecure,
     smtpUser: demo ? 'hello.haiyin.pod@gmail.com' : '',
     smtpSameAsImap: true,
+    sendOnly: false,
+    allowSelfSigned: false,
     password: demo ? 'demoapppassword1' : '',
     smtpPassword: ''
   }
@@ -96,6 +100,8 @@ function formFromAccount(account: Account): FormState {
     smtpSecure: account.smtpSecure,
     smtpUser: account.smtpUser,
     smtpSameAsImap: account.smtpSameAsImap,
+    sendOnly: account.sendOnly,
+    allowSelfSigned: account.allowSelfSigned,
     password: '',
     smtpPassword: ''
   }
@@ -456,9 +462,11 @@ export function Accounts(): JSX.Element {
     const next: Record<string, string> = {}
     if (!form.email.trim()) next.email = '请填写邮箱地址'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) next.email = '邮箱地址格式不正确'
-    if (!form.imapHost.trim()) next.imapHost = '请填写收件服务器地址'
-    if (parsePort(form.imapPort) == null) next.imapPort = '端口需为 1–65535'
-    if (!form.imapUser.trim()) next.imapUser = '请填写收件账号'
+    if (!form.sendOnly) {
+      if (!form.imapHost.trim()) next.imapHost = '请填写收件服务器地址（只发信的账户请勾选「仅发件」）'
+      if (parsePort(form.imapPort) == null) next.imapPort = '端口需为 1–65535'
+      if (!form.imapUser.trim()) next.imapUser = '请填写收件账号'
+    }
     if (!form.smtpHost.trim()) next.smtpHost = '请填写发件服务器地址'
     if (parsePort(form.smtpPort) == null) next.smtpPort = '端口需为 1–65535'
     if (!form.smtpSameAsImap && !form.smtpUser.trim()) next.smtpUser = '请填写发件账号'
@@ -480,6 +488,8 @@ export function Accounts(): JSX.Element {
     smtpSecure: form.smtpSecure,
     smtpUser: form.smtpSameAsImap ? form.imapUser.trim() : form.smtpUser.trim(),
     smtpSameAsImap: form.smtpSameAsImap,
+    sendOnly: form.sendOnly,
+    allowSelfSigned: form.allowSelfSigned,
     password: form.password || undefined,
     smtpPassword: form.smtpSameAsImap ? form.password || undefined : form.smtpPassword || undefined
   })
@@ -899,8 +909,23 @@ export function Accounts(): JSX.Element {
               </div>
             )}
 
+            {/* 仅发件开关：阿里云 DirectMail 这类只有 SMTP、没有收件箱的服务 */}
+            <div className="sendonly-row">
+              <Switch
+                checked={form.sendOnly}
+                onChange={(v) => update({ sendOnly: v })}
+                ariaLabel="此邮箱只用于发信"
+              />
+              <div>
+                <div className="lbl">此邮箱只用于发信（没有收件箱）</div>
+                <div className="sub">
+                  阿里云 DirectMail、SendGrid 等「邮件推送」服务只能发信；收件请另配一个 Gmail / QQ 账户。
+                </div>
+              </div>
+            </div>
+
             {/* 01 收件 IMAP */}
-            <div className="srv-block">
+            <div className="srv-block" style={form.sendOnly ? { display: 'none' } : undefined}>
               <div className="srv-block-hd">
                 <span className="idx">01</span>
                 <Icon name="serverDown" size={11} />
@@ -980,6 +1005,18 @@ export function Accounts(): JSX.Element {
               <div className="fm-hint">
                 <Icon name="alert" size={10} />
                 <span>{preset.passwordHint}</span>
+              </div>
+            </div>
+
+            <div className="sendonly-row">
+              <Switch
+                checked={form.allowSelfSigned}
+                onChange={(v) => update({ allowSelfSigned: v })}
+                ariaLabel="允许自签名证书"
+              />
+              <div>
+                <div className="lbl">允许自签名证书</div>
+                <div className="sub">企业自建 IMAP / SMTP 常见；公共邮箱（Gmail/QQ/阿里云）不要打开。</div>
               </div>
             </div>
 

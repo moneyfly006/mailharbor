@@ -25,8 +25,25 @@ export function openDb(customPath?: string): DB {
   mkdirSync(dirname(path), { recursive: true })
   db = openSqlite(path)
   db.exec(SCHEMA)
+  migrate(db)
   db.prepare(`INSERT OR REPLACE INTO schema_meta(key,value) VALUES('version','1')`).run()
   return db
+}
+
+/** 轻量迁移：给老库补新列（SQLite 不支持 IF NOT EXISTS 的 ADD COLUMN） */
+function migrate(database: ReturnType<typeof openSqlite>): void {
+  const cols = (table: string): string[] =>
+    (database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name)
+  try {
+    if (!cols('accounts').includes('allow_self_signed')) {
+      database.exec('ALTER TABLE accounts ADD COLUMN allow_self_signed INTEGER NOT NULL DEFAULT 0')
+    }
+    if (!cols('accounts').includes('send_only')) {
+      database.exec('ALTER TABLE accounts ADD COLUMN send_only INTEGER NOT NULL DEFAULT 0')
+    }
+  } catch {
+    /* 迁移失败不阻塞启动（旧库仍可用，只是没有该开关） */
+  }
 }
 
 export function closeDb(): void {
@@ -84,6 +101,7 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   replyBodyEn: 'Hi there,\n\nReceived — thanks! We\'ve filed your artwork: {文件名}\n\nBest regards,\n{工厂名}',
   logLevel: 'info',
   proxy: { mode: 'system', host: '127.0.0.1', port: 7890 },
+  replyAccountId: null,
   retryMaxAttempts: 8,
   multiRuleStrategy: 'all'
 }

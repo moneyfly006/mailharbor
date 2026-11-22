@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   imap_user TEXT NOT NULL, imap_pass_enc BLOB,
   smtp_host TEXT NOT NULL, smtp_port INTEGER NOT NULL, smtp_secure TEXT NOT NULL DEFAULT 'ssl',
   smtp_user TEXT NOT NULL, smtp_from_name TEXT, smtp_same_as_imap INTEGER NOT NULL DEFAULT 1, smtp_pass_enc BLOB,
+  allow_self_signed INTEGER NOT NULL DEFAULT 0,
+  send_only INTEGER NOT NULL DEFAULT 0,
   last_check_at INTEGER, last_ok_at INTEGER, last_error_code TEXT, last_error TEXT,
   uid_validity TEXT, last_uid INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,

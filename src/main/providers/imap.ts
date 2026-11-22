@@ -174,7 +174,9 @@ export function providerConfigFromAccount(
     smtpSecure: account.smtpSecure,
     smtpUser: account.smtpUser,
     smtpPass: secrets.smtpPass,
-    smtpFromName: account.smtpFromName
+    smtpFromName: account.smtpFromName,
+    allowSelfSigned: !!account.allowSelfSigned,
+    proxy
   }
 }
 
@@ -193,7 +195,9 @@ export function providerConfigFromInput(input: AccountInput, proxy?: ProviderCon
     smtpSecure: input.smtpSecure,
     smtpUser: input.smtpUser || input.imapUser,
     smtpPass: input.smtpSameAsImap ? imapPass : input.smtpPassword ?? '',
-    smtpFromName: input.smtpFromName
+    smtpFromName: input.smtpFromName,
+    allowSelfSigned: !!input.allowSelfSigned,
+    proxy
   }
 }
 
@@ -217,6 +221,8 @@ function imapOptionsOf(cfg: ProviderConfig, overrides: Partial<ImapFlowOptions> 
     secure: cfg.imapSecure === 'ssl',
     doSTARTTLS: cfg.imapSecure === 'starttls',
     auth: { user: cfg.imapUser, pass: cfg.imapPass },
+    // 部分国内服务器（QQ/163）要求 IMAP ID 命令，否则报 Unsafe Login
+    clientInfo: { name: 'MailHarbor', version: '1.0' },
     logger: false,
     tls: { rejectUnauthorized: !cfg.allowSelfSigned, servername: cfg.imapHost },
     // 跨国链路/代理下握手更慢，放宽到 20s；读取超时 2 分钟（Gmail 大附件常见）

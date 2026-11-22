@@ -28,6 +28,10 @@ export interface Account {
   smtpFromName: string
   /** 是否与收件使用同一账号密码 */
   smtpSameAsImap: boolean
+  /** 允许自签名证书（企业自建 IMAP/SMTP 常见） */
+  allowSelfSigned: boolean
+  /** 只用于发信（如阿里云 DirectMail，没有收件箱） */
+  sendOnly: boolean
   hasPassword: boolean
   lastCheckAt: number | null
   lastOkAt: number | null
@@ -55,6 +59,10 @@ export interface AccountInput {
   smtpUser: string
   smtpFromName?: string
   smtpSameAsImap: boolean
+  /** 允许自签名证书（企业自建 IMAP/SMTP 常见） */
+  allowSelfSigned?: boolean
+  /** 只用于发信（没有收件箱的服务，如阿里云 DirectMail） */
+  sendOnly?: boolean
   /** 新建时必填；编辑时留空表示不修改 */
   password?: string
   smtpPassword?: string
@@ -284,6 +292,8 @@ export interface Settings {
   retryMaxAttempts: number
   /** 网络代理（国内访问 Gmail 必须；默认跟随系统） */
   proxy: ProxySettings
+  /** 回信用哪个账户发（null = 谁收到就用谁发） */
+  replyAccountId: number | null
   multiRuleStrategy: 'all' | 'priority'
 }
 

@@ -686,3 +686,14 @@
 @media (max-width: 1400px) {
   .send-item .factory-field { width: 180px; }
 }
+
+/* 回信发件账户下拉 */
+.reply-from-select {
+  height: 28px;
+  font-size: 11.5px;
+  border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  background: var(--paper-000, #FDFBF6);
+  color: var(--ink-800);
+  padding: 0 6px;
+}

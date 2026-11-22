@@ -104,6 +104,8 @@ export interface AccountRow {
   smtp_from_name: string | null
   smtp_same_as_imap: number
   smtp_pass_enc: SecretBlob
+  allow_self_signed: number
+  send_only: number
   last_check_at: number | null
   last_ok_at: number | null
   last_error_code: string | null
@@ -237,6 +239,8 @@ function mapAccount(r: AccountRow, todayCount = 0, totalFiles = 0): Account {
     smtpUser: r.smtp_user,
     smtpFromName: r.smtp_from_name ?? '',
     smtpSameAsImap: bool(r.smtp_same_as_imap),
+    allowSelfSigned: bool(r.allow_self_signed ?? 0),
+    sendOnly: bool(r.send_only ?? 0),
     hasPassword: !!r.imap_pass_enc && r.imap_pass_enc.length > 0,
     lastCheckAt: r.last_check_at,
     lastOkAt: r.last_ok_at,
@@ -400,11 +404,13 @@ export function getAccountSecrets(id: number): { imapPass: string; smtpPass: str
 
 export function createAccount(input: AccountInput): Account {
   const email = (input.email ?? '').trim()
-  const imapUser = (input.imapUser ?? '').trim()
+  const sendOnly = !!input.sendOnly
+  // 只发件账户（如阿里云 DirectMail）没有 IMAP，用邮箱地址兜底当用户名
+  const imapUser = (input.imapUser ?? '').trim() || (sendOnly ? email : '')
   if (!email) throw new Error('请填写邮箱地址')
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('邮箱地址格式不正确')
-  if (!input.imapHost?.trim()) throw new Error('请填写 IMAP 服务器地址')
-  if (!imapUser) throw new Error('请填写 IMAP 用户名')
+  if (!sendOnly && !input.imapHost?.trim()) throw new Error('请填写 IMAP 服务器地址（只发信的账户请勾选「仅发件」）')
+  if (!sendOnly && !imapUser) throw new Error('请填写 IMAP 用户名')
   if (!input.smtpHost?.trim()) throw new Error('请填写 SMTP 服务器地址')
   if (!input.password) throw new Error('请填写应用专用密码 / 授权码')
   const smtpPass = input.smtpSameAsImap ? input.password : input.smtpPassword ?? ''
@@ -417,9 +423,9 @@ export function createAccount(input: AccountInput): Account {
         `INSERT INTO accounts(
            preset,email,display_name,enabled,status,
            imap_host,imap_port,imap_secure,imap_user,imap_pass_enc,
-           smtp_host,smtp_port,smtp_secure,smtp_user,smtp_from_name,smtp_same_as_imap,smtp_pass_enc,
+           smtp_host,smtp_port,smtp_secure,smtp_user,smtp_from_name,smtp_same_as_imap,smtp_pass_enc,allow_self_signed,send_only,
            uid_validity,last_uid,created_at,updated_at
-         ) VALUES(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?,?, NULL,0,?,?)`
+         ) VALUES(?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?,?,?,?, NULL,0,?,?)`
       )
       .run(
         input.preset,
@@ -427,7 +433,7 @@ export function createAccount(input: AccountInput): Account {
         input.displayName?.trim() || email.split('@')[0],
         1,
         'pending_test',
-        input.imapHost.trim(),
+        input.imapHost?.trim() ?? '',
         Number(input.imapPort) || 993,
         input.imapSecure,
         imapUser,
@@ -439,6 +445,8 @@ export function createAccount(input: AccountInput): Account {
         input.smtpFromName?.trim() || 'MailHarbor 收货助手',
         bit(input.smtpSameAsImap),
         codec.encrypt(smtpPass),
+        bit(input.allowSelfSigned),
+        bit(sendOnly),
         ts,
         ts
       )
@@ -456,7 +464,8 @@ export function updateAccount(id: number, input: AccountInput): Account {
   const email = (input.email ?? '').trim()
   if (!email) throw new Error('请填写邮箱地址')
   const imapUser = (input.imapUser ?? '').trim()
-  if (!input.imapHost?.trim()) throw new Error('请填写 IMAP 服务器地址')
+  const sendOnly = !!input.sendOnly
+  if (!sendOnly && !input.imapHost?.trim()) throw new Error('请填写 IMAP 服务器地址（只发信的账户请勾选「仅发件」）')
   if (!input.smtpHost?.trim()) throw new Error('请填写 SMTP 服务器地址')
 
   const toBuffer = (b: SecretBlob): Buffer | null => (b ? Buffer.from(b) : null)
@@ -489,6 +498,7 @@ export function updateAccount(id: number, input: AccountInput): Account {
            preset=?, email=?, display_name=?, status=?,
            imap_host=?, imap_port=?, imap_secure=?, imap_user=?, imap_pass_enc=?,
            smtp_host=?, smtp_port=?, smtp_secure=?, smtp_user=?, smtp_from_name=?, smtp_same_as_imap=?, smtp_pass_enc=?,
+           allow_self_signed=?, send_only=?,
            last_error_code=?, last_error=?, updated_at=?
          WHERE id=?`
       )
@@ -497,7 +507,7 @@ export function updateAccount(id: number, input: AccountInput): Account {
         email,
         input.displayName?.trim() || email.split('@')[0],
         nextStatus,
-        input.imapHost.trim(),
+        input.imapHost?.trim() ?? '',
         Number(input.imapPort) || 993,
         input.imapSecure,
         imapUser,
@@ -509,6 +519,8 @@ export function updateAccount(id: number, input: AccountInput): Account {
         input.smtpFromName?.trim() || 'MailHarbor 收货助手',
         bit(smtpSame),
         newSmtpPass,
+        bit(!!input.allowSelfSigned),
+        bit(!!input.sendOnly),
         changedConfig ? null : old.last_error_code,
         changedConfig ? null : old.last_error,
         now(),

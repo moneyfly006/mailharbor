@@ -102,6 +102,26 @@ mail-harbor/
 **验证结果**：`tsc --noEmit`（主进程 + 渲染层）通过 · `electron-vite build` 通过 · 核心 29 断言 + 后端 381 断言 + SQLite 适配层 11 断言 + 打包运行时 E2E 16 断言全过（mock IMAP/SMTP：双路径落盘、SMTP 回信、幂等复跑、部分路径失败只重试失败项、IDLE 自动收信、新增规则后自动补扫历史邮件）。
 
 
+
+## 邮箱兼容性（实测）
+
+| 邮箱 / 服务 | 收信 | 回信 | 说明 |
+| --- | --- | --- | --- |
+| **Gmail / Google Workspace** | ✅ IMAP 993 SSL | ✅ SMTP 465 SSL | 必须用「应用专用密码」（先开两步验证） |
+| **QQ 邮箱** | ✅ IMAP 993 SSL | ✅ SMTP 465 SSL | 用「授权码」；已实测 227 封收件箱登录成功 |
+| **阿里云 DirectMail**（smtpdm.aliyun.com） | ❌ 无收件箱 | ✅ SMTP 465 SSL | **只能发信**：账户里勾「仅发件」，并在「自动回复」把它设为回信发件账户 |
+| 163 / 126 等国内邮箱 | ✅ IMAP | ✅ SMTP | 需在设置里开启 IMAP/SMTP 并使用授权码；软件已发送 IMAP ID 命令，避免「Unsafe Login」 |
+| 企业自建 IMAP/SMTP | ✅ SSL / STARTTLS | ✅ SSL / STARTTLS | 支持自签名证书（勾「允许自签名证书」）、143/587 端口 |
+| Outlook / Microsoft 365 | ❌ | ❌ | 微软已停用 IMAP/SMTP 基本认证，只能 OAuth；当前版本不支持 |
+| SendGrid / 其它 SMTP 中继 | ❌ 无收件箱 | ✅ SMTP | 同阿里云：勾「仅发件」当发件通道 |
+
+> 「仅发件」账户在「邮箱账户」里勾选；「自动回复 → 回信用哪个账户发信」可指定它，
+> 这样可以用自己域名（`noreply@yourdomain`）给客户回信，而收件仍用 Gmail/QQ。
+
+**兼容性自动化测试**：`pnpm test:providers`（19 项断言，覆盖自签名证书开关、SSL/STARTTLS、
+错误密码提示、TLS 自建邮箱全链路收信+落盘+回信、HTML 正文关键词匹配、仅发件账户回信）。
+真实邮箱连通性可跑 `node scripts/real-provider-check.mjs`（凭据只从环境变量读）。
+
 ## 网络代理（国内访问 Gmail 必须）
 
 软件支持四种代理模式，在「邮箱账户 → 网络代理」里设置：

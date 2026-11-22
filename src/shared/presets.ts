@@ -117,6 +117,7 @@ export function emptyAccountInput(preset: ProviderPreset = 'gmail'): AccountInpu
     smtpUser: '',
     smtpFromName: 'MailHarbor 收货助手',
     smtpSameAsImap: true,
+    allowSelfSigned: false,
     password: '',
     smtpPassword: ''
   }

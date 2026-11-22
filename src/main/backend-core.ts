@@ -19,6 +19,8 @@ import { Scheduler, type SchedulerProvider } from './scheduler'
 import {
   providerConfigFromAccount, providerConfigFromInput, testConnection, type ProviderConfig
 } from './providers/imap'
+import { testSmtpConnection } from './smtp'
+import type { TestResultLine } from '@shared/types'
 import { sendReply as smtpSendReply, buildReplyVars, renderTemplate, type ReplyRequest, type SendReplyResult } from './smtp'
 import { setLogLevel } from './log'
 import type { Backend } from './services'
@@ -58,6 +60,44 @@ function failedTest(message: string, protocol: 'imap' | 'smtp' = 'imap', input?:
         errorCode: 'UNKNOWN',
         message: protocol === 'smtp' ? message : '跳过 SMTP 测试'
       }
+    ],
+    testedAt: Date.now()
+  }
+}
+
+/** 仅发件账户：只测 SMTP，IMAP 行标记为"跳过" */
+async function testSendOnly(cfg: ProviderConfig): Promise<TestResult> {
+  const smtpLine = await testSmtpConnection({
+    host: cfg.smtpHost,
+    port: cfg.smtpPort,
+    secure: cfg.smtpSecure,
+    user: cfg.smtpUser,
+    pass: cfg.smtpPass,
+    allowSelfSigned: cfg.allowSelfSigned,
+    proxy: cfg.proxy
+  }).catch(
+    (e): TestResultLine => ({
+      protocol: 'smtp',
+      ok: false,
+      latencyMs: 0,
+      host: cfg.smtpHost,
+      port: cfg.smtpPort,
+      errorCode: 'UNKNOWN',
+      message: e instanceof Error ? e.message : String(e)
+    })
+  )
+  return {
+    ok: smtpLine.ok,
+    lines: [
+      {
+        protocol: 'imap',
+        ok: true,
+        latencyMs: 0,
+        host: '',
+        port: 0,
+        message: '该账户设为「仅发件」，跳过收件测试（收件请另配邮箱）'
+      },
+      smtpLine
     ],
     testedAt: Date.now()
   }
@@ -154,7 +194,9 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         return failedTest('请填写 SMTP 密码（未勾选「与收件使用同一密码」时必填）', 'smtp', input)
       }
       try {
-        return await testConnection(providerConfigFromInput(input, proxyOf()))
+        const cfg = providerConfigFromInput(input, proxyOf())
+        // 仅发件账户（阿里云 DirectMail 等）没有 IMAP，只测 SMTP
+        return input.sendOnly ? await testSendOnly(cfg) : await testConnection(cfg)
       } catch (e) {
         return failedTest(`测试连接失败：${e instanceof Error ? e.message : String(e)}`, 'imap', input)
       }
@@ -171,12 +213,12 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       const cfg = providerConfigFromAccount(account, secrets, proxyOf())
       let result: TestResult
       try {
-        result = await testConnection(cfg)
+        result = account.sendOnly ? await testSendOnly(cfg) : await testConnection(cfg)
       } catch (e) {
         result = failedTest(`测试连接失败：${e instanceof Error ? e.message : String(e)}`, 'imap')
       }
       // 测试结果直接反映到账户状态：全绿 = 可收信；认证类失败 = auth_failed；网络类 = conn_failed
-      const errLine = result.lines.find((l) => !l.ok)
+      const errLine = result.lines.find((l) => !l.ok && !(account.sendOnly && l.protocol === 'imap'))
       if (result.ok) {
         repos.setAccountStatus(id, account.enabled ? 'enabled' : 'pending_test', {
           checked: true,

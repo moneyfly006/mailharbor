@@ -490,6 +490,31 @@ export function AutoReply(): JSX.Element {
               </div>
               <div className="send-item send-item--wide">
                 <div>
+                  <div className="lbl">回信用哪个账户发信</div>
+                  <div className="sub">默认「跟随收信账户」；也可用企业域名邮箱（如阿里云 DirectMail）单独发信</div>
+                </div>
+                <select
+                  className="factory-field reply-from-select"
+                  value={draft.replyAccountId ?? ''}
+                  aria-label="回信发件账户"
+                  onChange={(e) => {
+                    const v = e.target.value
+                    markDraft({ replyAccountId: v ? Number(v) : null })
+                  }}
+                >
+                  <option value="">跟随收信账户（默认）</option>
+                  {accounts
+                    .filter((a) => a.enabled)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.email}
+                        {a.sendOnly ? '（仅发件）' : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="send-item send-item--wide">
+                <div>
                   <div className="lbl">回信署名（工厂名）</div>
                   <div className="sub">模板里的 {'{工厂名}'} 用它替换</div>
                 </div>
