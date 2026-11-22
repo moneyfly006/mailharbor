@@ -11,6 +11,7 @@ import nodemailer from 'nodemailer'
 import type { SendMailOptions, Transporter } from 'nodemailer'
 import type { Encryption, Settings, TestResultLine } from '@shared/types'
 import { classifyMailError, FIX_HINTS, preflightLine, probeTcp } from './providers/errors'
+import { resolveProxy, createBridge, type Bridge } from './net/proxy'
 
 // ---------------------------------------------------------------------------
 // 配置 / 请求
@@ -25,6 +26,8 @@ export interface SmtpConfig {
   allowSelfSigned?: boolean
   /** 单次连接/握手超时（毫秒），默认 10s */
   timeoutMs?: number
+  /** 代理（与 IMAP 共用设置；SMTP 是裸 TCP，需要本地转发桥） */
+  proxy?: { mode: 'none' | 'system' | 'socks5' | 'http'; host: string; port: number }
 }
 
 export interface ReplyParty {
@@ -255,12 +258,25 @@ export function buildReplyMime(req: ReplyRequest, at: number = Date.now()): Buil
 // ---------------------------------------------------------------------------
 // Transport
 // ---------------------------------------------------------------------------
-export function createSmtpTransport(cfg: SmtpConfig): Transporter {
-  const timeout = cfg.timeoutMs ?? 10_000
+async function buildSmtpTransport(cfg: SmtpConfig): Promise<{ transport: Transporter; bridge: Bridge | null; label: string | null }> {
+  const timeout = cfg.timeoutMs ?? 20_000
   const isSsl = cfg.secure === 'ssl'
-  return nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
+  let host = cfg.host
+  let port = cfg.port
+  let bridge: Bridge | null = null
+  let label: string | null = null
+  if (cfg.proxy && cfg.proxy.mode !== 'none') {
+    const proxy = await resolveProxy(cfg.proxy)
+    if (proxy) {
+      bridge = await createBridge(proxy, cfg.host, cfg.port)
+      host = '127.0.0.1'
+      port = bridge.port
+      label = `${proxy.kind.toUpperCase()} ${proxy.host}:${proxy.port}（${proxy.source}）`
+    }
+  }
+  const transport = nodemailer.createTransport({
+    host,
+    port,
     secure: isSsl, // 465
     requireTLS: cfg.secure === 'starttls', // 587
     ignoreTLS: cfg.secure === 'none', // 仅本地/企业内网明文（mock 测试）
@@ -268,9 +284,27 @@ export function createSmtpTransport(cfg: SmtpConfig): Transporter {
     pool: false,
     connectionTimeout: timeout,
     greetingTimeout: timeout,
-    socketTimeout: Math.max(timeout, 30_000),
+    socketTimeout: Math.max(timeout, 60_000),
+    // 经代理时 TLS 的 SNI 仍用真实域名
     tls: { rejectUnauthorized: !cfg.allowSelfSigned, servername: cfg.host }
   })
+  return { transport, bridge, label }
+}
+
+/** 保留导出（给需要自行管理生命周期的调用方）；使用后请 close bridge */
+export async function createSmtpTransport(cfg: SmtpConfig): Promise<{ transport: Transporter; close(): Promise<void> }> {
+  const { transport, bridge } = await buildSmtpTransport(cfg)
+  return {
+    transport,
+    close: async () => {
+      try {
+        transport.close()
+      } catch {
+        /* ignore */
+      }
+      await bridge?.close().catch(() => {})
+    }
+  }
 }
 
 function mailOptionsFor(req: ReplyRequest): SendMailOptions {
@@ -288,7 +322,7 @@ function mailOptionsFor(req: ReplyRequest): SendMailOptions {
 
 /** 真正发信：失败抛 ReplySendError（code 为稳定错误码） */
 export async function sendReply(cfg: SmtpConfig, req: ReplyRequest): Promise<SendReplyResult> {
-  const transport = createSmtpTransport(cfg)
+  const { transport, bridge } = await buildSmtpTransport(cfg)
   try {
     const info = await transport.sendMail(mailOptionsFor(req))
     const accepted = (info.accepted ?? [])
@@ -308,16 +342,28 @@ export async function sendReply(cfg: SmtpConfig, req: ReplyRequest): Promise<Sen
     } catch {
       /* ignore */
     }
+    await bridge?.close().catch(() => {})
   }
 }
 
 /** SMTP 测试连接：TCP 预检 → EHLO/AUTH → QUIT */
 export async function testSmtpConnection(cfg: SmtpConfig): Promise<TestResultLine> {
-  const probe = await probeTcp(cfg.host, cfg.port, cfg.timeoutMs ?? 5000)
-  const pre = preflightLine('smtp', cfg.host, cfg.port, probe)
-  if (pre) return pre
   const started = Date.now()
-  const transport = createSmtpTransport(cfg)
+  let built: Awaited<ReturnType<typeof buildSmtpTransport>>
+  try {
+    built = await buildSmtpTransport(cfg)
+  } catch (e) {
+    return {
+      protocol: 'smtp',
+      ok: false,
+      latencyMs: Date.now() - started,
+      host: cfg.host,
+      port: cfg.port,
+      errorCode: 'PROXY_FAILED',
+      message: `代理连接失败：${e instanceof Error ? e.message : String(e)}（检查设置里的代理地址/端口）`
+    }
+  }
+  const { transport, bridge, label } = built
   try {
     await transport.verify()
     return {
@@ -326,7 +372,7 @@ export async function testSmtpConnection(cfg: SmtpConfig): Promise<TestResultLin
       latencyMs: Date.now() - started,
       host: cfg.host,
       port: cfg.port,
-      message: 'SMTP 登录成功，可以发信'
+      message: `SMTP 登录成功，可以发信${label ? ` · 经代理 ${label}` : ' · 直连'}`
     }
   } catch (e) {
     const c = classifyMailError(e, 'smtp')

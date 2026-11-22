@@ -1,0 +1,71 @@
+name: Release（构建 macOS + Windows 并发布，支持自动更新）
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            platform: win
+          - name: macOS (Apple Silicon)
+            os: macos-14
+            platform: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+
+      - name: 安装依赖
+        run: pnpm install --no-frozen-lockfile
+
+      - name: 类型检查 + 单元测试
+        shell: bash
+        run: |
+          pnpm typecheck
+          pnpm test:core
+          # sqlite 适配层测试用 env 前缀，Windows 的 cmd 不支持，跳过
+          if [ "$RUNNER_OS" != "Windows" ]; then pnpm test:sqlite; fi
+
+      - name: 构建渲染层/主进程
+        run: pnpm exec electron-vite build
+
+      - name: 打包并发布（Windows）
+        if: matrix.platform == 'win'
+        run: pnpm exec electron-builder --win nsis --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 打包并发布（macOS）
+        if: matrix.platform == 'mac'
+        run: pnpm exec electron-builder --mac --${{ contains(matrix.name, 'Apple') && 'arm64' || 'x64' }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: 上传构建产物（便于手动下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: MailHarbor-${{ matrix.platform }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+          if-no-files-found: ignore

@@ -229,8 +229,38 @@ export interface DashboardData {
 }
 
 // ---------------------------------------------------------------------------
+// 自动更新
+// ---------------------------------------------------------------------------
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'up-to-date'
+  | 'error'
+
+export interface UpdateState {
+  status: UpdateStatus
+  currentVersion: string
+  availableVersion: string | null
+  progressPercent: number | null
+  message: string | null
+  checkedAt: number | null
+}
+
+// ---------------------------------------------------------------------------
 // 设置
 // ---------------------------------------------------------------------------
+export type ProxyMode = 'none' | 'system' | 'socks5' | 'http'
+
+export interface ProxySettings {
+  /** 不使用 / 跟随系统 / 自定义 SOCKS5 / 自定义 HTTP */
+  mode: ProxyMode
+  host: string
+  port: number
+}
+
 export interface Settings {
   pollIntervalSec: number
   autostart: boolean
@@ -252,6 +282,8 @@ export interface Settings {
   replyLanguage: 'zh' | 'en' | 'both'
   logLevel: 'debug' | 'info' | 'warn' | 'error'
   retryMaxAttempts: number
+  /** 网络代理（国内访问 Gmail 必须；默认跟随系统） */
+  proxy: ProxySettings
   multiRuleStrategy: 'all' | 'priority'
 }
 
@@ -266,3 +298,4 @@ export type MainEvent =
   | { type: 'dashboard:changed' }
   | { type: 'toast'; level: 'success' | 'warn' | 'error'; title: string; body?: string }
   | { type: 'listening:changed'; listening: boolean }
+  | { type: 'update:changed'; state: UpdateState }

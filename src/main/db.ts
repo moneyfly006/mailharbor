@@ -83,6 +83,7 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   replySubjectEn: 'Artwork received — {关键词}',
   replyBodyEn: 'Hi there,\n\nReceived — thanks! We\'ve filed your artwork: {文件名}\n\nBest regards,\n{工厂名}',
   logLevel: 'info',
+  proxy: { mode: 'system', host: '127.0.0.1', port: 7890 },
   retryMaxAttempts: 8,
   multiRuleStrategy: 'all'
 }

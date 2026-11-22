@@ -42,11 +42,17 @@ const api: Api = {
   rescan: () => invoke(IPC.rescan),
   settings: {
     get: () => invoke(IPC.settingsGet),
-    save: (s) => invoke(IPC.settingsSave, s)
+    save: (s) => invoke(IPC.settingsSave, s),
+    testProxy: (p) => invoke(IPC.proxyTest, p)
   },
   pickFolder: () => invoke(IPC.pickFolder),
   openPath: (p) => invoke(IPC.openPath, p),
   appInfo: () => invoke(IPC.appInfo),
+  update: {
+    check: () => invoke(IPC.updateCheck),
+    install: () => invoke(IPC.updateInstall),
+    state: () => invoke(IPC.updateState)
+  },
   onEvent: (cb: (e: MainEvent) => void) => {
     const listener = (_event: unknown, payload: MainEvent): void => cb(payload)
     ipcRenderer.on(IPC.event, listener as never)

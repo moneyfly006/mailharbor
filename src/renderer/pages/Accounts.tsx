@@ -2,7 +2,7 @@ import type { JSX } from 'react'
 /** 邮箱账户：左侧账户卡列表（启用/停用/连接失败/待测试）+ 右侧手填 IMAP/SMTP 表单 */
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import type {
-  Account, AccountInput, Encryption, ProviderPreset, TestResult, TestResultLine
+  Account, AccountInput, Encryption, ProviderPreset, ProxySettings, Settings, TestResult, TestResultLine
 } from '@shared/types'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/Modal'
@@ -372,6 +372,12 @@ export function Accounts(): JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [faqOpen, setFaqOpen] = useState(false)
   const [autoFocusField, setAutoFocusField] = useState<'email' | 'password' | null>(null)
+  const [settings, setSettings] = useState<Settings | null>(null)
+  const [proxy, setProxy] = useState<ProxySettings>({ mode: 'system', host: '127.0.0.1', port: 7890 })
+  const [proxyOpen, setProxyOpen] = useState(false)
+  const [proxyTesting, setProxyTesting] = useState(false)
+  const [proxyResult, setProxyResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [proxySaving, setProxySaving] = useState(false)
 
   const preset = useMemo<PresetDef>(() => presetById(form.preset), [form.preset])
   const editing = form.id != null
@@ -382,7 +388,9 @@ export function Accounts(): JSX.Element {
 
   const load = useCallback(async () => {
     try {
-      const list = await api.accounts.list()
+      const [list, s] = await Promise.all([api.accounts.list(), api.settings.get()])
+      setSettings(s)
+      setProxy(s.proxy ?? { mode: 'system', host: '127.0.0.1', port: 7890 })
       setAccounts(list)
       setLoadError(null)
     } catch (e) {
@@ -617,6 +625,34 @@ export function Accounts(): JSX.Element {
   const enabledCount = (accounts ?? []).filter((a) => a.enabled).length
   const failedCount = (accounts ?? []).filter((a) => a.status === 'auth_failed' || a.status === 'conn_failed').length
 
+  const testProxyNow = async (): Promise<void> => {
+    setProxyTesting(true)
+    setProxyResult(null)
+    try {
+      const r = await api.settings.testProxy(proxy)
+      setProxyResult({ ok: r.ok, message: r.message })
+    } catch (e) {
+      setProxyResult({ ok: false, message: errMsg(e) })
+    } finally {
+      setProxyTesting(false)
+    }
+  }
+
+  const saveProxy = async (): Promise<void> => {
+    if (!settings) return
+    setProxySaving(true)
+    try {
+      const saved = await api.settings.save({ ...settings, proxy })
+      setSettings(saved)
+      pushToast('success', '网络代理已保存', '下一次收信/回信立即生效')
+      void refreshDashboard()
+    } catch (e) {
+      pushToast('error', '保存失败', errMsg(e))
+    } finally {
+      setProxySaving(false)
+    }
+  }
+
   const header = (
     <PageHeader
       eyebrow="Accounts"
@@ -636,6 +672,81 @@ export function Accounts(): JSX.Element {
     />
   )
 
+  const proxyCard = (
+    <section className="card proxy-card" aria-label="网络代理">
+      <button type="button" className="proxy-hd" onClick={() => setProxyOpen((v) => !v)}>
+        <Icon name="serverUp" size={14} />
+        <span className="proxy-title">网络代理</span>
+        <span className="proxy-state">
+          {proxy.mode === 'none'
+            ? '不使用代理（直连）'
+            : proxy.mode === 'system'
+              ? '跟随系统代理'
+              : `${proxy.mode.toUpperCase()} ${proxy.host}:${proxy.port}`}
+        </span>
+        <span className="proxy-hint">国内访问 Gmail 需要代理；国外可设为「不使用」</span>
+        <span className="proxy-toggle">{proxyOpen ? '收起' : '设置'}</span>
+      </button>
+      {proxyOpen ? (
+        <div className="proxy-bd">
+          <div className="proxy-row">
+            <SegmentedControl
+              value={proxy.mode}
+              onChange={(mode: string) => {
+                setProxy((p: ProxySettings) => ({ ...p, mode: mode as ProxySettings['mode'] }))
+                setProxyResult(null)
+              }}
+              options={[
+                { value: 'system', label: '跟随系统' },
+                { value: 'none', label: '不使用' },
+                { value: 'socks5', label: 'SOCKS5' },
+                { value: 'http', label: 'HTTP' }
+              ]}
+              ariaLabel="代理模式"
+            />
+            {proxy.mode === 'socks5' || proxy.mode === 'http' ? (
+              <div className="proxy-addr">
+                <TextField
+                  value={proxy.host}
+                  onChange={(host) => setProxy((p: ProxySettings) => ({ ...p, host }))}
+                  placeholder="127.0.0.1"
+                  ariaLabel="代理地址"
+                />
+                <span className="proxy-colon">:</span>
+                <TextField
+                  value={String(proxy.port)}
+                  onChange={(v) => {
+                    const n = Number(v.replace(/[^\d]/g, ''))
+                    setProxy((p: ProxySettings) => ({ ...p, port: Number.isFinite(n) ? Math.min(65535, n) : 0 }))
+                  }}
+                  placeholder="7890"
+                  mono
+                  ariaLabel="代理端口"
+                />
+              </div>
+            ) : null}
+            <Button size="sm" icon="refresh" loading={proxyTesting} onClick={() => void testProxyNow()}>
+              测试代理
+            </Button>
+            <Button size="sm" variant="primary" loading={proxySaving} onClick={() => void saveProxy()}>
+              保存
+            </Button>
+          </div>
+          {proxyResult ? (
+            <div className={cls('proxy-result', proxyResult.ok ? 'is-ok' : 'is-bad')}>
+              <Icon name={proxyResult.ok ? 'check' : 'alert'} size={12} />
+              <span>{proxyResult.message}</span>
+            </div>
+          ) : null}
+          <div className="proxy-note">
+            软件默认「跟随系统代理」：自动读取系统代理设置（macOS 系统设置 / Windows Internet 选项 / 环境变量）。
+            国内不挂代理时 Gmail 的 IMAP 993 通常连不上，会提示「连接超时」。
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+
   const imapLine = test?.lines.find((l) => l.protocol === 'imap')
   const smtpLine = test?.lines.find((l) => l.protocol === 'smtp')
   const testPassed = test?.ok === true
@@ -644,6 +755,7 @@ export function Accounts(): JSX.Element {
   return (
     <>
       {header}
+      {proxyCard}
 
       <div className="acct-wrap">
         <div className="left-col">

@@ -20,6 +20,7 @@ import {
 import {
   sendReply as sendSmtpReply, testSmtpConnection, type SendReplyResult, type SmtpConfig
 } from '../smtp'
+import { resolveProxy, createBridge, type Bridge } from '../net/proxy'
 import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
@@ -55,6 +56,34 @@ export interface ProviderConfig {
   smtpPass: string
   smtpFromName?: string
   allowSelfSigned?: boolean
+  /** 代理设置（由设置页读取后注入；缺省=不使用代理） */
+  proxy?: { mode: 'none' | 'system' | 'socks5' | 'http'; host: string; port: number }
+}
+
+/**
+ * 解析代理并按需建立本地转发桥：
+ * 返回 imapflow 实际要连的 host/port（可能是 127.0.0.1:xxxxx），以及 TLS 的 SNI 域名。
+ */
+async function endpointViaProxy(
+  realHost: string,
+  realPort: number,
+  proxyCfg: ProviderConfig['proxy']
+): Promise<{ host: string; port: number; servername: string; bridge: Bridge | null; proxyLabel: string | null }> {
+  if (!proxyCfg || proxyCfg.mode === 'none') {
+    return { host: realHost, port: realPort, servername: realHost, bridge: null, proxyLabel: null }
+  }
+  const proxy = await resolveProxy(proxyCfg)
+  if (!proxy) {
+    return { host: realHost, port: realPort, servername: realHost, bridge: null, proxyLabel: null }
+  }
+  const bridge = await createBridge(proxy, realHost, realPort)
+  return {
+    host: '127.0.0.1',
+    port: bridge.port,
+    servername: realHost,
+    bridge,
+    proxyLabel: `${proxy.kind.toUpperCase()} ${proxy.host}:${proxy.port}（${proxy.source}）`
+  }
 }
 
 export interface InboundAttachment {
@@ -126,7 +155,11 @@ export interface ProviderOptions {
 // ---------------------------------------------------------------------------
 // 配置构造
 // ---------------------------------------------------------------------------
-export function providerConfigFromAccount(account: Account, secrets: { imapPass: string; smtpPass: string }): ProviderConfig {
+export function providerConfigFromAccount(
+  account: Account,
+  secrets: { imapPass: string; smtpPass: string },
+  proxy?: ProviderConfig['proxy']
+): ProviderConfig {
   return {
     accountId: account.id,
     email: account.email,
@@ -145,7 +178,7 @@ export function providerConfigFromAccount(account: Account, secrets: { imapPass:
   }
 }
 
-export function providerConfigFromInput(input: AccountInput): ProviderConfig {
+export function providerConfigFromInput(input: AccountInput, proxy?: ProviderConfig['proxy']): ProviderConfig {
   const imapPass = input.password ?? ''
   return {
     email: input.email,
@@ -171,7 +204,8 @@ function smtpConfigOf(cfg: ProviderConfig): SmtpConfig {
     secure: cfg.smtpSecure,
     user: cfg.smtpUser,
     pass: cfg.smtpPass,
-    allowSelfSigned: cfg.allowSelfSigned
+    allowSelfSigned: cfg.allowSelfSigned,
+    proxy: cfg.proxy
   }
 }
 
@@ -179,14 +213,16 @@ function imapOptionsOf(cfg: ProviderConfig, overrides: Partial<ImapFlowOptions> 
   return {
     host: cfg.imapHost,
     port: cfg.imapPort,
+    // secure 与 doSTARTTLS 互斥：imapflow 会直接报 Misconfiguration
     secure: cfg.imapSecure === 'ssl',
-    doSTARTTLS: cfg.imapSecure !== 'none',
+    doSTARTTLS: cfg.imapSecure === 'starttls',
     auth: { user: cfg.imapUser, pass: cfg.imapPass },
     logger: false,
     tls: { rejectUnauthorized: !cfg.allowSelfSigned, servername: cfg.imapHost },
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 60_000,
+    // 跨国链路/代理下握手更慢，放宽到 20s；读取超时 2 分钟（Gmail 大附件常见）
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 120_000,
     // 连接空闲后自动进入 IDLE（EXISTS 事件靠它）；25 分钟自动断开重进（RFC 2177 要求 <29 分钟）
     disableAutoIdle: false,
     autoIdleDelay: 500,
@@ -321,16 +357,38 @@ export function mapImapError(err: unknown): { code: MailErrorCode; message: stri
 /**
  * 测试 IMAP：TCP 预检（5s）→ TLS 握手 → LOGIN → SELECT INBOX(只读) → 读 UIDVALIDITY → LOGOUT
  */
-export async function testImapConnection(cfg: ProviderConfig, timeoutMs = 10_000): Promise<TestResultLine> {
-  const probe = await probeTcp(cfg.imapHost, cfg.imapPort, Math.min(5000, timeoutMs))
-  const pre = preflightLine('imap', cfg.imapHost, cfg.imapPort, probe)
-  if (pre) return pre
-
+export async function testImapConnection(cfg: ProviderConfig, timeoutMs = 20_000): Promise<TestResultLine> {
+  // 走代理时无法直接 TCP 预检真实地址，预检就对着本地桥做；直连才预检真实主机
   const started = Date.now()
   let client: ImapFlow | null = null
+  let bridge: Bridge | null = null
   try {
+    let endpoint: Awaited<ReturnType<typeof endpointViaProxy>>
+    try {
+      endpoint = await endpointViaProxy(cfg.imapHost, cfg.imapPort, cfg.proxy)
+    } catch (e) {
+      return {
+        protocol: 'imap',
+        ok: false,
+        latencyMs: Date.now() - started,
+        host: cfg.imapHost,
+        port: cfg.imapPort,
+        errorCode: 'PROXY_FAILED',
+        message: `代理连接失败：${e instanceof Error ? e.message : String(e)}（检查设置里的代理地址/端口，或先关掉代理试试）`
+      }
+    }
+    bridge = endpoint.bridge
+    const probe = await probeTcp(endpoint.host, endpoint.port, Math.min(5000, timeoutMs))
+    const pre = preflightLine('imap', cfg.imapHost, cfg.imapPort, probe)
+    if (pre) {
+      await bridge?.close()
+      return endpoint.proxyLabel ? { ...pre, message: `${pre.message}（代理 ${endpoint.proxyLabel}）` } : pre
+    }
     client = new ImapFlow(
       imapOptionsOf(cfg, {
+        host: endpoint.host,
+        port: endpoint.port,
+        tls: { rejectUnauthorized: !cfg.allowSelfSigned, servername: endpoint.servername },
         connectionTimeout: timeoutMs,
         greetingTimeout: timeoutMs,
         socketTimeout: timeoutMs * 2,
@@ -349,7 +407,7 @@ export async function testImapConnection(cfg: ProviderConfig, timeoutMs = 10_000
         latencyMs: Date.now() - started,
         host: cfg.imapHost,
         port: cfg.imapPort,
-        message: `IMAP 登录成功，收件箱 ${mb && typeof mb === 'object' ? mb.exists : 0} 封（UIDVALIDITY ${uidValidity || '-'}）`
+        message: `IMAP 登录成功，收件箱 ${mb && typeof mb === 'object' ? mb.exists : 0} 封（UIDVALIDITY ${uidValidity || '-'}）${endpoint.proxyLabel ? ` · 经代理 ${endpoint.proxyLabel}` : ' · 直连'}`
       }
     } finally {
       lock.release()
@@ -377,6 +435,7 @@ export async function testImapConnection(cfg: ProviderConfig, timeoutMs = 10_000
         }
       }
     }
+    await bridge?.close().catch(() => {})
   }
 }
 
@@ -446,9 +505,21 @@ export class ImapSmtpProvider {
     return this.connecting
   }
 
+  private bridge: Bridge | null = null
+
   private async doConnect(): Promise<SyncState> {
     await this.closeClient()
-    const client = new ImapFlow(imapOptionsOf(this.cfg))
+    // 国内直连 Gmail 的 993 经常被断：按设置走代理（本地转发桥）
+    const endpoint = await endpointViaProxy(this.cfg.imapHost, this.cfg.imapPort, this.cfg.proxy)
+    this.bridge = endpoint.bridge
+    if (endpoint.proxyLabel) this.log.info(`IMAP 经代理连接：${endpoint.proxyLabel}`)
+    const client = new ImapFlow(
+      imapOptionsOf(this.cfg, {
+        host: endpoint.host,
+        port: endpoint.port,
+        tls: { rejectUnauthorized: !this.cfg.allowSelfSigned, servername: endpoint.servername }
+      })
+    )
     this.client = client
     this.attachClientErrorHandlers(client)
     try {
@@ -499,6 +570,9 @@ export class ImapSmtpProvider {
   private async closeClient(): Promise<void> {
     const client = this.client
     this.client = null
+    const bridge = this.bridge
+    this.bridge = null
+    if (bridge) await bridge.close().catch(() => {})
     if (!client) return
     try {
       client.removeAllListeners('exists')
@@ -554,21 +628,29 @@ export class ImapSmtpProvider {
       uids = uids.slice(-max)
     } else {
       const from = Math.max(1, Math.floor(opts.lastUid) + 1)
-      const found = asUidList(await client.search({ uid: `${from}:*` }, { uid: true }))
+      const foundRaw = await client.search({ uid: `${from}:*` }, { uid: true })
+      this.log.info(`[debug] search uid ${from}:* => ${JSON.stringify(foundRaw).slice(0, 120)}`)
+      const found = asUidList(foundRaw)
       uids = found.filter((u) => u >= from && u > opts.lastUid).sort((a, b) => a - b)
       uids = uids.slice(0, max)
     }
     if (uids.length === 0) return []
 
     const range = uids.join(',')
-    const metas: FetchMessageObject[] = await client.fetchAll(range, {
-      uid: true,
-      envelope: true,
-      bodyStructure: true,
-      internalDate: true,
-      size: true,
-      headers: ['auto-submitted', 'references', 'in-reply-to', 'from']
-    })
+    // 关键：range 是「UID」，必须用 { uid: true } 取信。
+    // 否则 imapflow 会按「序号」解释，邮箱里邮件数少于 UID 时直接报 out of range。
+    const metas: FetchMessageObject[] = await client.fetchAll(
+      range,
+      {
+        uid: true,
+        envelope: true,
+        bodyStructure: true,
+        internalDate: true,
+        size: true,
+        headers: ['auto-submitted', 'references', 'in-reply-to', 'from']
+      },
+      { uid: true }
+    )
     metas.sort((a, b) => a.uid - b.uid)
 
     const out: InboundMessage[] = []

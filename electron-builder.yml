@@ -11,8 +11,15 @@ files:
   - resources/**
   - package.json
 
-# 运行时用 Electron 内置 node:sqlite，无需为每个平台重编译原生模块
+# 运行时用 Electron 内置 node:sqlite，免原生模块重编译
 npmRebuild: false
+
+# ---- 自动更新：发布到 GitHub Releases ----
+publish:
+  provider: github
+  owner: moneyfly006
+  repo: mailharbor
+  releaseType: release
 
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
@@ -23,8 +30,6 @@ win:
       arch: [x64]
   icon: resources/icon.ico
   artifactName: MailHarbor-Setup-${version}.${ext}
-  # macOS 上没有 wine，跳过 rcedit（exe 图标/版本信息用 NSIS 安装时写）
-  signAndEditExecutable: false
 
 nsis:
   oneClick: false
@@ -37,10 +42,21 @@ nsis:
   deleteAppDataOnUninstall: false
   runAfterFinish: true
 
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  category: public.app-category.productivity
+  icon: resources/icon.png
+  artifactName: MailHarbor-${version}-${arch}.${ext}
+  # 没有开发者证书时关闭签名（本地/试用）；正式分发建议配 CSC_LINK
+  identity: null
+
+dmg:
+  artifactName: MailHarbor-${version}-${arch}.${ext}
+
 linux:
   target: [AppImage]
   category: Office
-
-mac:
-  target: [dir]
-  category: public.app-category.productivity

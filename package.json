@@ -23,6 +23,7 @@
     "test:packaged": "node scripts/packaged-e2e.mjs"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "imapflow": "^2.12.2",
     "nodemailer": "^10.6.1",
     "zod": "^4.6.7"
@@ -34,17 +35,17 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "better-sqlite3": "^13.2.0",
     "electron": "^45.4.1",
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
+    "hoodiecrow-imap": "^3.3.1",
+    "imap-server": "^0.0.1",
+    "mailparser": "^3.15.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "typescript": "^5.9.3",
-    "vite": "^8.3.8",
-    "imap-server": "^0.0.1",
     "smtp-server": "^3.21.7",
-    "mailparser": "^3.15.0",
-    "hoodiecrow-imap": "^3.3.1",
-    "better-sqlite3": "^13.2.0"
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8"
   }
 }

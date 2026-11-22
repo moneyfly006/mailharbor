@@ -124,11 +124,22 @@ a {
   border: 0;
 }
 
-/* 焦点环：键盘可达性。不要用 outline:none 了事。 */
+/* 焦点环：键盘可达性。
+   注意：不要用 box-shadow 描边——它和控件自身边框叠加会变成"多层框"，
+   统一改成 outline（画在元素外侧，不占布局、不与边框重叠）。 */
 :focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* 输入类控件：聚焦只改边框颜色（内部 input 无边框，避免框里套框） */
+.input:focus-within,
+.f-search:focus-within,
+.search:focus-within,
+.tgt:focus-within,
+.tgt-path:focus-within {
+  box-shadow: none;
 }
 
 /* 原生滚动条：细、纸色、不抢眼 */

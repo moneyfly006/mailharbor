@@ -1,7 +1,7 @@
 /** preload 暴露给渲染层的 API 契约（IPC channel 常量 + 方法签名） */
 import type {
   Account, AccountInput, DashboardData, ListRecordsQuery, ListRecordsResult, MainEvent,
-  Rule, RuleInput, Settings, TestResult
+  ProxySettings, Rule, RuleInput, Settings, TestResult, UpdateState
 } from './types'
 
 export const IPC = {
@@ -36,11 +36,15 @@ export const IPC = {
   rescan: 'ops:rescan',
   // 设置
   settingsGet: 'settings:get',
+  proxyTest: 'settings:test-proxy',
   settingsSave: 'settings:save',
   // 通用
   pickFolder: 'dialog:pick-folder',
   openPath: 'shell:open-path',
   appInfo: 'app:info',
+  updateCheck: 'update:check',
+  updateInstall: 'update:install',
+  updateState: 'update:state',
   // 事件
   event: 'main:event'
 } as const
@@ -83,9 +87,15 @@ export interface Api {
   settings: {
     get(): Promise<Settings>
     save(s: Settings): Promise<Settings>
+    testProxy(p: ProxySettings): Promise<{ ok: boolean; latencyMs: number; message: string }>
   }
   pickFolder(): Promise<string | null>
   openPath(p: string): Promise<void>
   appInfo(): Promise<{ version: string; userData: string; listening: boolean }>
+  update: {
+    check(): Promise<UpdateState>
+    install(): Promise<void>
+    state(): Promise<UpdateState>
+  }
   onEvent(cb: (e: MainEvent) => void): () => void
 }

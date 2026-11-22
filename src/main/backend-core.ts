@@ -72,6 +72,13 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     }
   }
   const now = deps.now ?? ((): number => Date.now())
+  /** 设置里的代理（IMAP/SMTP 都是裸 TCP，必须通过本地转发桥走代理） */
+  const proxyOf = (): ProviderConfig['proxy'] => {
+    const raw = deps.getSetting<{ mode?: string; host?: string; port?: number }>('proxy')
+    if (!raw || typeof raw !== 'object') return { mode: 'system', host: '127.0.0.1', port: 7890 }
+    const mode = (raw.mode ?? 'system') as 'none' | 'system' | 'socks5' | 'http'
+    return { mode, host: String(raw.host ?? '127.0.0.1'), port: Number(raw.port ?? 7890) }
+  }
   /** 账户状态变化后推给 UI（列表/概览都靠它刷新） */
   const emitAccountChanged = (id: number): void => {
     try {
@@ -147,7 +154,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         return failedTest('请填写 SMTP 密码（未勾选「与收件使用同一密码」时必填）', 'smtp', input)
       }
       try {
-        return await testConnection(providerConfigFromInput(input))
+        return await testConnection(providerConfigFromInput(input, proxyOf()))
       } catch (e) {
         return failedTest(`测试连接失败：${e instanceof Error ? e.message : String(e)}`, 'imap', input)
       }
@@ -161,7 +168,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         return failedTest('该账户尚未保存密码，请编辑账户重新填写', 'imap')
       }
       const secrets = repos.getAccountSecrets(id)
-      const cfg = providerConfigFromAccount(account, secrets)
+      const cfg = providerConfigFromAccount(account, secrets, proxyOf())
       let result: TestResult
       try {
         result = await testConnection(cfg)
@@ -198,7 +205,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       const account = accounts[0]
       if (!account) return { ok: false, message: '没有已启用且配置了密码的账户，请先在「邮箱账户」里添加并测试通过' }
       const secrets = repos.getAccountSecrets(account.id)
-      const cfg = providerConfigFromAccount(account, secrets)
+      const cfg = providerConfigFromAccount(account, secrets, proxyOf())
       const smtpCfg = {
         host: cfg.smtpHost,
         port: cfg.smtpPort,

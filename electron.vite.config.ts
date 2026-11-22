@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 export default defineConfig({
   main: {
     resolve: { alias: { '@shared': resolve('src/shared') } },
-    build: { rollupOptions: { external: ['better-sqlite3', 'imapflow', 'nodemailer'] } }
+    build: { rollupOptions: { external: ['better-sqlite3', 'imapflow', 'nodemailer', 'electron-updater'] } }
   },
   preload: {
     resolve: { alias: { '@shared': resolve('src/shared') } }

@@ -1719,3 +1719,31 @@ textarea.input:focus-within {
     padding-top: 10px;
   }
 }
+
+/* 侧栏底部：版本 + 检查更新 */
+.sb-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 2px;
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+}
+
+.sb-version .mono {
+  font-family: var(--font-mono);
+}
+
+.sb-update {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 10.5px;
+  color: var(--color-accent-text, #A83321);
+  cursor: pointer;
+}
+
+.sb-update:hover {
+  text-decoration: underline;
+}

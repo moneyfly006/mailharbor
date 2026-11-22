@@ -18,6 +18,11 @@ export interface IpcContext {
   getBackend: () => Backend | null
   getWindow: () => BrowserWindow | null
   broadcast: (e: MainEvent) => void
+  updater?: {
+    check(manual?: boolean): Promise<import('@shared/types').UpdateState>
+    installNow(): void
+    state: () => import('@shared/types').UpdateState
+  }
 }
 
 let ctx: IpcContext | null = null
@@ -238,6 +243,27 @@ export function registerIpc(context: IpcContext): void {
   // ---------------- 设置 ----------------
   ipcMain.handle(IPC.settingsGet, (): Settings => readSettings())
 
+  ipcMain.handle(
+    IPC.proxyTest,
+    async (_e, proxy: { mode: 'none' | 'system' | 'socks5' | 'http'; host: string; port: number }) => {
+      const { resolveProxy, testProxy } = await import('./net/proxy')
+      if (proxy.mode === 'none') return { ok: true, latencyMs: 0, message: '当前为「不使用代理」：直连邮件服务器（国内访问 Gmail 通常不通）' }
+      const resolved = await resolveProxy(proxy)
+      if (!resolved) {
+        return {
+          ok: false,
+          latencyMs: 0,
+          message:
+            proxy.mode === 'system'
+              ? '没有检测到系统代理：请先打开代理软件（Clash/V2Ray 等），或改成「自定义」手动填 SOCKS5/HTTP 地址'
+              : '代理地址或端口为空'
+        }
+      }
+      const r = await testProxy(resolved)
+      return { ...r, message: `${r.message}（来源：${resolved.source}）` }
+    }
+  )
+
   ipcMain.handle(IPC.settingsSave, async (_e, s: Settings): Promise<Settings> => {
     for (const [k, v] of Object.entries(s)) setSetting(k, v)
     setSetting('pollIntervalSec', Math.max(15, Math.min(3600, Number(s.pollIntervalSec) || 30)))
@@ -261,6 +287,12 @@ export function registerIpc(context: IpcContext): void {
   ipcMain.handle(IPC.openPath, async (_e, p: string): Promise<void> => {
     await shell.openPath(p)
   })
+
+  ipcMain.handle(IPC.updateCheck, async () => ctx?.updater?.check(true) ?? null)
+  ipcMain.handle(IPC.updateInstall, async (): Promise<void> => {
+    ctx?.updater?.installNow()
+  })
+  ipcMain.handle(IPC.updateState, () => ctx?.updater?.state() ?? null)
 
   ipcMain.handle(IPC.appInfo, () => ({
     version: app.getVersion(),

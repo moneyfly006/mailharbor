@@ -129,7 +129,25 @@ export function createDemoApi(): Api {
     }
   }
 
+  let demoUpdate: import('@shared/types').UpdateState = {
+    status: 'idle',
+    currentVersion: '0.1.0',
+    availableVersion: null,
+    progressPercent: null,
+    message: '演示模式：不检查更新',
+    checkedAt: null
+  }
+
   const api: Api = {
+    update: {
+      check: async () => {
+        await delay(600)
+        demoUpdate = { ...demoUpdate, status: 'up-to-date', message: '已是最新版本（演示）', checkedAt: Date.now() }
+        return demoUpdate
+      },
+      install: async () => {},
+      state: async () => demoUpdate
+    },
     reply: {
       test: async (to: string) => {
         await delay(700)
@@ -396,6 +414,18 @@ export function createDemoApi(): Api {
         await delay(260)
         state.settings = clone(s)
         return clone(state.settings)
+      },
+      testProxy: async (p) => {
+        await delay(450)
+        if (p.mode === 'none') {
+          return { ok: true, latencyMs: 4, message: '当前为「不使用代理」：直连邮件服务器（国内访问 Gmail 通常不通）' }
+        }
+        if (!p.host || !p.port) return { ok: false, latencyMs: 0, message: '代理地址或端口为空' }
+        return {
+          ok: true,
+          latencyMs: 180,
+          message: `代理可用：${p.mode.toUpperCase()} ${p.host}:${p.port} → imap.gmail.com:993（演示数据）`
+        }
       }
     },
 

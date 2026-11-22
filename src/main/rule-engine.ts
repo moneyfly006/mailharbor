@@ -85,20 +85,26 @@ export function matchOne(rule: Pick<Rule, 'id' | 'keyword' | 'scope' | 'mode'>, 
  * 实现要点：**不能先 normalize 掉空格**，否则 `原图+卡套 追加` 会变成 `原图+卡套追加` 丢失分隔信息。
  * 所以 subject 传入的是"只做全角归一 + 小写 + 折叠空白"的版本，再单独比较关键词的紧致形式。
  */
-function exactHit(subjectLoose: string, kw: string): boolean {
+function exactHit(looseSubject: string, kw: string): boolean {
   const kwLoose = kw.replace(/\s+/g, '')
-  const looseNoSpace = subjectLoose.replace(/\s+/g, '')
-  if (looseNoSpace === kwLoose) return true
-  if (!looseNoSpace.startsWith(kwLoose)) return false
-  const rest = looseNoSpace.slice(kwLoose.length)
-  if (!rest) return true
-  // 关键词后面第一个字符：分隔符 / 中文 / 标点 → 视为「关键词 + 说明」；字母数字 → 不同品类
-  const ch = rest[0]
-  if (/[\u4e00-\u9fff]/.test(ch)) {
-    // 中文修饰词直接跟（如「卡套盒」「卡套子」）视为不同品类；但「追加/打样/补发/确认/收尾/第/二」等业务词算同一关键词
-    return /^(追加|打样|补发|补|确认|收尾|返|重|新|老|加|第|再|更)/.test(rest) === true
+  const noSpace = looseSubject.replace(/\s+/g, '')
+  if (noSpace === kwLoose) return true
+  if (!noSpace.startsWith(kwLoose)) return false
+
+  // 关键词在原文里后面紧跟的字符（保留分隔符，用来判断"关键词 + 说明"）
+  const idx = looseSubject.indexOf(kwLoose)
+  const afterRaw = idx >= 0 ? looseSubject.slice(idx + kwLoose.length) : noSpace.slice(kwLoose.length)
+
+  // ① 分隔符 / 数字 / 字母开头 → 一定是「关键词 + 说明」
+  //    例：`原图+卡套 追加: X`、`原图+浴室垫 BATH-CASE2`、`原图+卡套-打样`、`原图+卡套：第2批`
+  if (/^[\s\-_:：|/.、,，()（）\[【0-9A-Za-z]/.test(afterRaw)) return true
+
+  // ② 紧跟中文：业务说明词（追加/打样/补发…）算同一关键词；「卡套盒」「卡套子」这类修饰算不同品类
+  const restNoSpace = noSpace.slice(kwLoose.length)
+  if (/^[\u4e00-\u9fff]/.test(restNoSpace)) {
+    return /^(追加|打样|补发|补|确认|收尾|返|重|新|老|加|第|再|更)/.test(restNoSpace)
   }
-  return /^[\s\-_:：|/.、,，(（\[【0-9]/.test(ch)
+  return false
 }
 
 /** 返回命中的规则（已按 priority 升序排序，priority 数字小的优先） */

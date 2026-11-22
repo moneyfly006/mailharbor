@@ -302,7 +302,13 @@ export class Scheduler {
 
   private createProviderFor(account: Account): SchedulerProvider {
     const secrets = repos.getAccountSecrets(account.id)
-    const cfg = providerConfigFromAccount(account, secrets)
+    const rawProxy = this.deps.getSetting<{ mode?: string; host?: string; port?: number }>('proxy')
+    const proxy = {
+      mode: ((rawProxy?.mode ?? 'system') as 'none' | 'system' | 'socks5' | 'http'),
+      host: String(rawProxy?.host ?? '127.0.0.1'),
+      port: Number(rawProxy?.port ?? 7890)
+    }
+    const cfg = providerConfigFromAccount(account, secrets, proxy)
     if (this.deps.createProvider) return this.deps.createProvider(account, cfg)
     const provider = new ImapSmtpProvider(cfg, {
       logger: createLogger(`imap:${account.email}`),
@@ -391,11 +397,29 @@ export class Scheduler {
       if (account.status !== 'enabled') this.applyStatus(accountId, 'enabled', { ok: true })
       else repos.updateAccountSyncState(accountId, { lastOkAt: this.now() })
 
+      // 首次接入新账户：从"当前最新"开始收，不回溯历史。
+      // 否则一个已有几千封邮件的邮箱会被全量扫描，还可能给旧客户误发回信。
+      // 小邮箱（新账号/测试）直接全量处理；大邮箱（几千封历史）从最新开始，避免扫历史+误回旧邮件
+      const mailboxSize = Number(sync.exists ?? 0)
+      if (!account.lastUid && sync.uidNext && sync.uidNext > 1 && mailboxSize > 50) {
+        const baseline = Number(sync.uidNext) - 1
+        repos.updateAccountSyncState(accountId, {
+          lastUid: baseline,
+          uidValidity: String(sync.uidValidity ?? ''),
+          lastCheckAt: this.now(),
+          lastOkAt: this.now()
+        })
+        this.log.info(`首次接入：游标设为当前最新 UID ${baseline}（不回溯历史邮件；需要旧邮件请用「补扫历史」）`)
+        this.deps.emit({ type: 'dashboard:changed' })
+        return
+      }
+
       const messages = await provider.fetchNewMessages({
         lastUid: account.lastUid,
         uidValidity: account.uidValidity,
         maxMessages: 25
       })
+      this.log.info(`[debug] 拉取完成：lastUid=${account.lastUid} 新邮件 ${messages.length} 封（UID: ${messages.map((m) => m.uid).join(',') || '-'}）`)
 
       let lastUid = account.lastUid
       for (const msg of messages) {

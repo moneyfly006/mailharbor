@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs'
 import { openDb, closeDb } from './db'
 import { registerIpc, disposeIpc, buildDashboard } from './ipc'
 import { createBackend } from './backend'
+import { createUpdater, getUpdateState } from './updater'
 import type { Backend } from './services'
 import type { MainEvent } from '@shared/types'
 
@@ -15,6 +16,7 @@ const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let backend: Backend | null = null
+let updater: ReturnType<typeof createUpdater> | null = null
 let quitting = false
 
 const gotLock = app.requestSingleInstanceLock()
@@ -49,7 +51,21 @@ async function bootstrap(): Promise<void> {
     console.error('[main] backend init failed:', e)
   }
 
-  registerIpc({ getBackend: () => backend, getWindow: () => mainWindow, broadcast })
+  updater = createUpdater({
+    window: () => mainWindow,
+    broadcast: (state) => broadcast({ type: 'update:changed', state })
+  })
+
+  registerIpc({
+    getBackend: () => backend,
+    getWindow: () => mainWindow,
+    broadcast,
+    updater: {
+      check: (manual) => updater!.check(manual),
+      installNow: () => updater!.installNow(),
+      state: () => getUpdateState()
+    }
+  })
 
   registerAppEvents()
   await createWindow()
@@ -88,6 +104,7 @@ function registerAppEvents(): void {
   app.on('before-quit', () => {
     quitting = true
     try {
+      updater?.dispose()
       backend?.scheduler.stopAll()
       backend?.dispose()
       disposeIpc()

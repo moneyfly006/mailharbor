@@ -1,5 +1,6 @@
 /** 左侧导航 + 底部常驻运行卡 */
 import type { JSX } from 'react'
+import { useEffect, useState } from 'react'
 import { cls, fmtCountdown, fmtDuration, secondsUntil } from '../lib/format'
 import { useApp, type Page } from '../state/app-state'
 import { useNow } from '../hooks/useNow'
@@ -14,6 +15,50 @@ const NAV: Array<{ page: Page; label: string; icon: IconName }> = [
 ]
 
 export function Sidebar(): JSX.Element {
+  const [version, setVersion] = useState('0.1.0')
+  const [updateState, setUpdateState] = useState<import('@shared/types').UpdateState | null>(null)
+  const [updateBusy, setUpdateBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const info = await window.mailharbor?.appInfo?.()
+        if (alive && info) setVersion(info.version)
+        const st = await window.mailharbor?.update?.state?.()
+        if (alive && st) setUpdateState(st)
+      } catch {
+        /* 演示模式 */
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const checkUpdate = async (): Promise<void> => {
+    if (!window.mailharbor?.update) return
+    setUpdateBusy(true)
+    try {
+      const st = await window.mailharbor.update.check()
+      if (st) setUpdateState(st)
+      if (st?.status === 'downloaded') await window.mailharbor.update.install()
+    } finally {
+      setUpdateBusy(false)
+    }
+  }
+
+  const updateLabel =
+    updateState?.status === 'downloaded'
+      ? `重启更新 v${updateState.availableVersion ?? ''}`
+      : updateState?.status === 'downloading'
+        ? `下载中 ${updateState.progressPercent ?? 0}%`
+        : updateState?.status === 'error'
+          ? '检查更新失败'
+          : updateState?.status === 'up-to-date'
+            ? '已是最新'
+            : '检查更新'
+
   const { page, navigate, dashboard, rulesCount, demo } = useApp()
   const now = useNow()
   const listening = dashboard?.listening ?? false
@@ -78,6 +123,12 @@ export function Sidebar(): JSX.Element {
         <div className="run-meter" aria-hidden="true">
           <i style={{ width: `${elapsed}%` }} />
         </div>
+      </div>
+      <div className="sb-version">
+        <span className="mono">v{version}</span>
+        <button type="button" className="sb-update" onClick={() => void checkUpdate()}>
+          {updateBusy ? '检查中…' : updateLabel}
+        </button>
       </div>
       <div className="sb-hint">
         {listening ? '关闭窗口后仍在托盘运行 · 收到邮件会提示' : '暂停期间：已在队列中的任务仍会完成'}

@@ -679,6 +679,7 @@ export const DEMO_RECORDS: RecordRow[] = makeRecords()
 // ---------------------------------------------------------------------------
 export const DEMO_SETTINGS: Settings = {
   pollIntervalSec: 30,
+  proxy: { mode: 'system', host: '127.0.0.1', port: 7890 },
   autostart: true,
   minimizeToTray: true,
   defaultPathEnabled: false,
