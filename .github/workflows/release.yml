@@ -1,17 +1,72 @@
-name: Release（构建 macOS + Windows 并发布，支持自动更新）
+name: Release（自动升版本 → 构建 macOS + Windows → 发布）
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'electron-builder.yml'
+      - 'electron.vite.config.ts'
+      - 'resources/**'
+      - 'package.json'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      bump:
+        description: '是否升版本（true=patch+1 并打 tag；false=用当前版本重打）'
+        required: false
+        default: 'true'
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  version:
+    name: 计算版本并打 tag
+    if: "!startsWith(github.event.head_commit.message, 'chore(release)')"
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: v${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: 升 patch 版本 + 打 tag
+        id: bump
+        shell: bash
+        run: |
+          set -e
+          DO_BUMP="${{ github.event.inputs.bump || 'true' }}"
+          CUR=$(node -p "require('./package.json').version")
+          if [ "$DO_BUMP" = "false" ]; then
+            NEW="$CUR"
+          else
+            NEW=$(node -p "const v=require('./package.json').version.split('.').map(Number);v[2]++;v.join('.')")
+            node -e "const fs=require('fs');const p=require('./package.json');p.version='$NEW';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+            git config user.name "MailHarbor Bot"
+            git config user.email "bot@mailharbor.local"
+            git add package.json
+            git commit -m "chore(release): v$NEW [skip ci]"
+            git push origin HEAD:main
+          fi
+          git tag -f -a "v$NEW" -m "MailHarbor v$NEW"
+          git push -f origin "v$NEW"
+          echo "version=$NEW" >> $GITHUB_OUTPUT
+          echo "新版本：$NEW"
+
   build:
     name: 构建 ${{ matrix.name }}
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +80,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
@@ -40,10 +97,9 @@ jobs:
         run: |
           pnpm typecheck
           pnpm test:core
-          # sqlite 适配层测试用 env 前缀，Windows 的 cmd 不支持，跳过
           if [ "$RUNNER_OS" != "Windows" ]; then pnpm test:sqlite; fi
 
-      - name: 构建渲染层/主进程
+      - name: 构建主进程/渲染层
         run: pnpm exec electron-vite build
 
       - name: 打包并发布（Windows）
@@ -54,15 +110,15 @@ jobs:
 
       - name: 打包并发布（macOS）
         if: matrix.platform == 'mac'
-        run: pnpm exec electron-builder --mac --${{ contains(matrix.name, 'Apple') && 'arm64' || 'x64' }} --publish always
+        run: pnpm exec electron-builder --mac --arm64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: 上传构建产物（便于手动下载）
+      - name: 上传产物（便于手动下载）
         uses: actions/upload-artifact@v4
         with:
-          name: MailHarbor-${{ matrix.platform }}
+          name: MailHarbor-${{ matrix.platform }}-v${{ needs.version.outputs.version }}
           path: |
             release/*.exe
             release/*.dmg
