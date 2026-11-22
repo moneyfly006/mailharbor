@@ -99,7 +99,7 @@ mail-harbor/
 | 5 屏 React UI（概览/触发规则/邮箱账户/自动回复/下载记录） | ✅ 截图见 `design/exports/app/` |
 | 本地模拟邮件服务器（无真实邮箱也能跑通全链路） | ✅ |
 
-**验证结果**：`tsc --noEmit`（主进程 + 渲染层）通过 · `electron-vite build` 通过 · 核心 29 断言 + 后端 376 断言全过（含 mock IMAP/SMTP 端到端：双路径落盘、SMTP 回信、幂等复跑、部分路径失败只重试失败项、IDLE 自动收信）。
+**验证结果**：`tsc --noEmit`（主进程 + 渲染层）通过 · `electron-vite build` 通过 · 核心 29 断言 + 后端 381 断言 + SQLite 适配层 11 断言 + 打包运行时 E2E 16 断言全过（mock IMAP/SMTP：双路径落盘、SMTP 回信、幂等复跑、部分路径失败只重试失败项、IDLE 自动收信、新增规则后自动补扫历史邮件）。
 
 ## Windows 安装包
 

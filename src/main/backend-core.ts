@@ -138,6 +138,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       checkNow: async () => {
         await scheduler.checkNow()
       },
+      reprocess: (accountId: number, uids: number[]) => scheduler.reprocess(accountId, uids),
       nextCheckAt: () => scheduler.nextCheckAt()
     },
     async testAccount(input: AccountInput): Promise<TestResult> {

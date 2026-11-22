@@ -584,6 +584,38 @@ export class ImapSmtpProvider {
     return out
   }
 
+  /**
+   * 按 UID 精确取信（补扫用）：新增关键词规则后，把之前"未命中"的邮件重新解析一遍。
+   * 与 fetchNewMessages 的区别：不受游标影响，也不会推进游标。
+   */
+  async fetchByUids(uids: number[]): Promise<InboundMessage[]> {
+    const wanted = Array.from(new Set(uids.filter((u) => u > 0))).slice(0, 200)
+    if (wanted.length === 0) return []
+    const client = await this.ensureClient()
+    const metas: FetchMessageObject[] = await client.fetchAll(
+      wanted.join(','),
+      {
+        uid: true,
+        envelope: true,
+        bodyStructure: true,
+        internalDate: true,
+        size: true,
+        headers: ['auto-submitted', 'references', 'in-reply-to', 'from']
+      },
+      { uid: true }
+    )
+    metas.sort((a, b) => a.uid - b.uid)
+    const out: InboundMessage[] = []
+    for (const meta of metas) {
+      try {
+        out.push(await this.toInboundMessage(meta))
+      } catch (e) {
+        this.log.warn(`补扫解析邮件 UID=${meta.uid} 失败`, e instanceof Error ? e.message : String(e))
+      }
+    }
+    return out
+  }
+
   private async toInboundMessage(meta: FetchMessageObject): Promise<InboundMessage> {
     const envelope = meta.envelope ?? {}
     const headers = parseHeaderBlock(meta.headers)

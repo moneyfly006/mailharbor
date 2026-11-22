@@ -33,6 +33,41 @@ function fail(e: unknown): never {
   throw new Error(msg)
 }
 
+/**
+ * 补扫历史邮件：新增/启用规则后，把之前"未命中关键词"的邮件按 UID 重新跑一遍流水线。
+ * 不动收信游标（避免和在途轮询互相覆盖）。
+ */
+async function rescanHistory(reason: string): Promise<void> {
+  console.log(`[rescan] 开始：${reason}`)
+  const backend = requireBackend()
+  const accountIds = repos.listAccountsForRescan()
+  console.log(`[rescan] 启用账户 ${accountIds.length} 个`)
+
+  let processed = 0
+  for (const accountId of accountIds) {
+    const uids = repos.listIgnoredMessageUids(accountId, 200)
+    console.log(`[rescan] 账户 #${accountId} 待补扫 UID: ${uids.length} 个`)
+    if (uids.length === 0) continue
+    try {
+      const r = await backend.scheduler.reprocess(accountId, uids)
+      console.log(`[rescan] 账户 #${accountId} 补扫结果 processed=${r.processed} errors=${r.errors}`)
+      processed += r.processed
+    } catch (e) {
+      console.error('[rescan] 补扫失败:', e instanceof Error ? e.message : String(e))
+    }
+  }
+  ctx?.broadcast({ type: 'rules:changed' })
+  ctx?.broadcast({ type: 'dashboard:changed' })
+  if (processed > 0) {
+    ctx?.broadcast({
+      type: 'toast',
+      level: 'success',
+      title: '已补扫历史邮件',
+      body: `${reason} · 重新处理 ${processed} 封，之前未命中的现在会入库`
+    })
+  }
+}
+
 export function registerIpc(context: IpcContext): void {
   ctx = context
 
@@ -91,6 +126,7 @@ export function registerIpc(context: IpcContext): void {
     try {
       const rule = repos.createRule(input)
       ctx?.broadcast({ type: 'rules:changed' })
+      void rescanHistory(`新增规则「${rule.keyword}」`).catch(() => {})
       return rule
     } catch (e) { fail(e) }
   })
@@ -114,6 +150,7 @@ export function registerIpc(context: IpcContext): void {
     try {
       const rule = repos.setRuleEnabled(id, enabled)
       ctx?.broadcast({ type: 'rules:changed' })
+      if (enabled) void rescanHistory(`启用规则「${rule.keyword}」`).catch(() => {})
       return rule
     } catch (e) { fail(e) }
   })
@@ -193,6 +230,11 @@ export function registerIpc(context: IpcContext): void {
     await requireBackend().scheduler.checkNow()
   })
 
+  // 补扫历史邮件：新增/启用规则后，让之前"未命中关键词"的邮件重新走一遍流水线
+  ipcMain.handle(IPC.rescan, async (): Promise<void> => {
+    await rescanHistory('手动补扫')
+  })
+
   // ---------------- 设置 ----------------
   ipcMain.handle(IPC.settingsGet, (): Settings => readSettings())
 
@@ -252,6 +294,7 @@ export function buildDashboard(): DashboardData {
     todayFailed: dashboard.todayFailed,
     pendingRetry: dashboard.pendingRetry,
     disks: repos.listDisks(),
+    rulePaths: repos.rulePathSummary(),
     recent,
     pollIntervalSec: getSetting<number>('pollIntervalSec') ?? 30,
     nextCheckAt: b?.scheduler.nextCheckAt() ?? null,

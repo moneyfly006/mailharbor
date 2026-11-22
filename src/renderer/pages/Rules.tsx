@@ -534,6 +534,15 @@ export function Rules(): JSX.Element {
     }
   }
 
+  /** 路径数量 -1（至少保留 1 条） */
+  const removeLastTarget = (): void => {
+    setDraft((prev) => {
+      if (!prev || prev.targets.length <= 1) return prev
+      return { ...prev, targets: prev.targets.slice(0, -1) }
+    })
+    setDirty(true)
+  }
+
   const removeTarget = (index: number): void => {
     setDraft((prev) => (prev ? { ...prev, targets: prev.targets.filter((_, i) => i !== index) } : prev))
     setDirty(true)
@@ -1068,7 +1077,29 @@ export function Rules(): JSX.Element {
                   <h3>
                     <span className="num">02</span>目标路径
                   </h3>
-                  <StatusBadge tone="neutral">{totalTargets} 个位置</StatusBadge>
+                  <span className="tgt-count" role="group" aria-label="该规则的目标路径数量">
+                    <button
+                      type="button"
+                      className="tgt-count-btn"
+                      aria-label="减少一个目标路径"
+                      title="减少一个目标路径"
+                      disabled={draft.targets.length <= 1}
+                      onClick={removeLastTarget}
+                    >
+                      −
+                    </button>
+                    <span className="tgt-count-num">{draft.targets.length}</span>
+                    <span className="tgt-count-lbl">个路径</span>
+                    <button
+                      type="button"
+                      className="tgt-count-btn"
+                      aria-label="增加一个目标路径"
+                      title="增加一个目标路径"
+                      onClick={addTarget}
+                    >
+                      +
+                    </button>
+                  </span>
                   <span className="note">
                     <Icon name="folder" size={12} />1 个附件 <span className="hl">→ 复制 {totalTargets} 份</span> ·{' '}
                     {requiredTargets} 份必达

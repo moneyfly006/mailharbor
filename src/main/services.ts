@@ -15,6 +15,8 @@ export interface Backend {
     resume(): Promise<void> | void
     isListening(): boolean
     checkNow(): Promise<void>
+    /** 补扫指定 UID（新增/启用规则后重跑历史邮件，不动游标） */
+    reprocess(accountId: number, uids: number[]): Promise<{ processed: number; errors: number }>
     nextCheckAt(): number | null
   }
   /** 测试「还没保存」的表单（新建账户向导用） */

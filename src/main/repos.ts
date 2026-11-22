@@ -581,6 +581,42 @@ export function updateAccountSyncState(
     )
 }
 
+/** 补扫历史邮件：把游标退回起点，让 pipeline 重新扫一遍（已完成的会跳过，忽略的会重试） */
+export function resetAccountCursor(accountId: number): void {
+  db().prepare('UPDATE accounts SET last_uid=0 WHERE id=?').run(accountId)
+}
+
+/** 需要补扫的账户（启用且未停用） */
+export function listAccountsForRescan(): number[] {
+  const rows = db()
+    .prepare("SELECT id FROM accounts WHERE enabled=1 AND status NOT IN ('disabled')")
+    .all() as Array<{ id: number }>
+  return rows.map((r) => r.id)
+}
+
+/** 某个规则配置的目标路径（概览用，按规则分组） */
+export function rulePathSummary(): Array<{ ruleId: number; keyword: string; enabled: boolean; paths: Array<{ path: string; required: boolean }> }> {
+  const rules = listRules()
+  return rules.map((r) => ({
+    ruleId: r.id,
+    keyword: r.keyword,
+    enabled: r.enabled,
+    paths: r.targets.filter((t) => t.enabled).map((t) => ({ path: t.path, required: t.required }))
+  }))
+}
+
+/** 未命中关键词/类型不符的邮件 UID（补扫重跑用） */
+export function listIgnoredMessageUids(accountId: number, limit = 200): number[] {
+  const rows = db()
+    .prepare(
+      `SELECT imap_uid FROM messages
+       WHERE account_id=? AND status IN ('ignored_no_keyword','ignored_type')
+       ORDER BY imap_uid DESC LIMIT ?`
+    )
+    .all(accountId, limit) as Array<{ imap_uid: number }>
+  return rows.map((r) => r.imap_uid)
+}
+
 export function accountTodayCount(accountId: number): number {
   const r = db()
     .prepare('SELECT COUNT(*) AS c FROM messages WHERE account_id=? AND received_at >= ?')

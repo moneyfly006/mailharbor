@@ -550,6 +550,7 @@
 }
 
 .tgt {
+  transition: border-color 120ms ease, box-shadow 120ms ease;
   display: grid;
   grid-template-columns: 14px 22px minmax(0, 1fr) 150px 84px auto;
   align-items: center;
@@ -559,6 +560,14 @@
   border-radius: var(--radius-md);
   background: var(--paper-000);
   box-shadow: var(--shadow-xs);
+}
+
+.tgt:hover {
+  border-color: var(--color-rule-strong);
+}
+
+.tgt:focus-within {
+  border-color: var(--color-accent-border, rgba(200, 66, 45, 0.45));
 }
 
 .tgt-branch {
@@ -576,25 +585,31 @@
   text-align: center;
 }
 
+/* 路径输入不再"框里套框"：整行就是一张卡片，输入区内部无边框，聚焦时整行高亮 */
 .tgt-path {
   display: flex;
   align-items: center;
   gap: 2px;
   height: 30px;
-  padding: 0 7px;
-  border: 1px solid var(--color-rule);
+  padding: 0 6px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--paper-100);
+  background: transparent;
   font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--ink-800);
   min-width: 0;
   overflow: hidden;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.tgt-path:hover {
+  background: var(--paper-100);
 }
 
 .tgt-path:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
+  background: var(--paper-050);
+  border-color: var(--color-accent-border, rgba(200, 66, 45, 0.45));
 }
 
 .tgt-path .drv {
@@ -1000,4 +1015,54 @@
   .ed-title {
     font-size: 19px;
   }
+}
+
+/* ---- 目标路径数量步进器：一条规则可以有几个路径，直接 +/- 设置 ---- */
+.tgt-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--color-rule);
+  border-radius: 999px;
+  background: var(--paper-100);
+  padding: 1px 6px 1px 2px;
+}
+
+.tgt-count-btn {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-600);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tgt-count-btn:hover:not(:disabled) {
+  background: var(--paper-300);
+  color: var(--ink-900);
+}
+
+.tgt-count-btn:disabled {
+  color: var(--ink-300);
+  cursor: not-allowed;
+}
+
+.tgt-count-num {
+  min-width: 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-900);
+}
+
+.tgt-count-lbl {
+  font-size: 10.5px;
+  color: var(--color-text-tertiary);
+  margin: 0 3px 0 1px;
 }

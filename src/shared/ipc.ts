@@ -33,6 +33,7 @@ export const IPC = {
   dashboard: 'dashboard:get',
   listeningSet: 'listening:set',
   checkNow: 'ops:check-now',
+  rescan: 'ops:rescan',
   // 设置
   settingsGet: 'settings:get',
   settingsSave: 'settings:save',
@@ -77,6 +78,8 @@ export interface Api {
   dashboard(): Promise<DashboardData>
   setListening(on: boolean): Promise<boolean>
   checkNow(): Promise<void>
+  /** 补扫历史邮件（新增规则后让之前"未命中"的邮件重新入库） */
+  rescan(): Promise<void>
   settings: {
     get(): Promise<Settings>
     save(s: Settings): Promise<Settings>

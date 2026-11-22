@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 /** 概览：监听状态 + 今日工单条 + 三卡（运行 / 邮箱 / 目标盘）+ 最近收件 + 失败待重试 */
 import { useState } from 'react'
-import type { Account, DiskInfo, RecordRow } from '@shared/types'
+import type { Account, DiskInfo, RecordRow, RulePathSummary } from '@shared/types'
 import { Button } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
@@ -159,6 +159,79 @@ function RetryItem({
         </span>
       </div>
     </div>
+  )
+}
+
+/** 概览「触发规则 · 存储路径」：一眼看清每个关键词落到哪几个文件夹，点路径直接打开 */
+function RulePathsCard({
+  rules,
+  onOpen,
+  onManage
+}: {
+  rules: RulePathSummary[]
+  onOpen: (path: string) => void
+  onManage: () => void
+}): JSX.Element {
+  const active = rules.filter((r) => r.enabled)
+  const pathCount = active.reduce((n, r) => n + r.paths.length, 0)
+  return (
+    <section className="card rulepaths" aria-label="触发规则与存储路径">
+      <div className="card-hd">
+        <h2 className="card-title">触发规则 · 存储路径</h2>
+        <span className="card-note">
+          {active.length} 条规则 · {pathCount} 个路径
+        </span>
+        <button type="button" className="card-note link" style={{ marginLeft: 12 }} onClick={onManage}>
+          管理规则 ›
+        </button>
+      </div>
+      <div className="rp-body">
+        {active.length === 0 ? (
+          <div className="rp-empty">
+            还没有启用任何规则。
+            <button type="button" className="rp-empty-link" onClick={onManage}>
+              去添加关键词与路径 ›
+            </button>
+          </div>
+        ) : (
+          active.map((r) => (
+            <div className="rp-rule" key={r.ruleId}>
+              <button
+                type="button"
+                className="rp-kw"
+                title={`${r.keyword}（点击管理规则）`}
+                onClick={onManage}
+              >
+                {r.keyword}
+              </button>
+              <span className="rp-arrow" aria-hidden="true">
+                →
+              </span>
+              <div className="rp-paths">
+                {r.paths.length === 0 ? (
+                  <span className="rp-nopath">未设置路径</span>
+                ) : (
+                  r.paths.map((p) => (
+                    <button
+                      type="button"
+                      key={p.path}
+                      className="rp-path"
+                      title={`点击在资源管理器中打开：${p.path}`}
+                      onClick={() => onOpen(p.path)}
+                    >
+                      <Icon name="folder" size={12} />
+                      <span className="rp-path-text">{p.path}</span>
+                      {r.paths.length > 1 && p.required ? <em className="rp-must">必达</em> : null}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      {pathCount > 0 ? <div className="rp-foot">点路径可直接在资源管理器中打开查看文件</div> : null}
+    </section>
   )
 }
 
@@ -430,12 +503,21 @@ export function Dashboard(): JSX.Element {
         </section>
       </div>
 
+      {/* 规则 → 存储路径：整行展示，规则再多也能滚动看全 */}
+      <RulePathsCard
+        rules={d.rulePaths}
+        onOpen={(path) => {
+          void api.openPath(path).catch(() => pushToast('error', '打开失败', path))
+        }}
+        onManage={() => navigate('rules')}
+      />
+
       {/* 底部：最近记录 + 待重试 */}
       <div className="cards-bottom">
         <section className="card recent">
           <div className="card-hd">
             <h2 className="card-title">最近收件</h2>
-            <span className="card-note">最近 {d.recent.length} 封</span>
+            <span className="card-note">最近 {Math.min(d.recent.length, 4)} 封 · 全部在「下载记录」</span>
             <button
               type="button"
               className="card-note link"
@@ -464,7 +546,7 @@ export function Dashboard(): JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {d.recent.slice(0, 6).map((row) => (
+                  {d.recent.slice(0, 4).map((row) => (
                     <RecentRow key={row.id} row={row} />
                   ))}
                 </tbody>
@@ -472,9 +554,9 @@ export function Dashboard(): JSX.Element {
             )}
           </div>
           <div className="card-ft">
-            <span>表格按时间倒序 · 悬停路径可查看完整位置</span>
+            <span>按时间倒序 · 悬停路径可看完整位置</span>
             <span style={{ marginLeft: 'auto' }} className="mono">
-              本页 {Math.min(d.recent.length, 6)} / {fmtNumber(d.todayMessages)}
+              显示 {Math.min(d.recent.length, 4)} / 今日 {fmtNumber(d.todayMessages)}
             </span>
           </div>
         </section>

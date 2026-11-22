@@ -777,9 +777,17 @@ export function buildDemoDashboard(
     return { ...d, ruleKeywords }
   })
 
+  const rulePaths = rules.map((r) => ({
+    ruleId: r.id,
+    keyword: r.keyword,
+    enabled: r.enabled,
+    paths: r.targets.filter((x) => x.enabled).map((x) => ({ path: x.path, required: x.required }))
+  }))
+
   return {
     listening,
     accounts,
+    rulePaths,
     todayMessages: today.length,
     todayMatched: matched.length,
     todayFiles: files,

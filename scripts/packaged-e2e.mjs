@@ -25,7 +25,7 @@ const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 env.MH_FORCE_NODE_SQLITE = '1'
 const app = await electron.launch({
-  executablePath: join(ROOT, 'release/mac-arm64/Electron.app/Contents/MacOS/Electron'),
+  executablePath: join(ROOT, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),
   args: [ROOT, '--no-sandbox', '--disable-gpu', '--user-data-dir=' + USER_DATA],
   env
 })
@@ -54,6 +54,8 @@ eq('账户已创建', !!created.acc.id, true)
 eq('IMAP 测试通过', created.test.lines.find((l) => l.protocol === 'imap')?.ok, true)
 eq('SMTP 测试通过', created.test.lines.find((l) => l.protocol === 'smtp')?.ok, true)
 eq('规则两个路径', created.rule.targets.length, 2)
+const rulesNow = await win.evaluate(() => window.mailharbor.rules.list())
+console.log('DEBUG rules:', JSON.stringify(rulesNow.map((r) => ({ kw: r.keyword, en: r.enabled, mode: r.mode, t: r.targets.length }))))
 eq('测试后账户状态=已启用', await win.evaluate(async (id) => (await window.mailharbor.accounts.list()).find((a) => a.id === id)?.status, created.acc.id), 'enabled')
 
 // 触发一次检查；落盘/回信可能是异步的，轮询等待

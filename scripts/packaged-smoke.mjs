@@ -1,5 +1,5 @@
 import { _electron as electron } from 'playwright'
-const EXE = '/Users/apple/Projects/mail-harbor/release/mac-arm64/Electron.app/Contents/MacOS/Electron'
+const EXE = '/Users/apple/Projects/mail-harbor/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
 const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 env.MH_FORCE_NODE_SQLITE = '1'      // 模拟打包后没有 better-sqlite3

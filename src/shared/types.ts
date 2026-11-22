@@ -204,9 +204,18 @@ export interface DiskInfo {
   ruleKeywords: string[]
 }
 
+export interface RulePathSummary {
+  ruleId: number
+  keyword: string
+  enabled: boolean
+  paths: Array<{ path: string; required: boolean }>
+}
+
 export interface DashboardData {
   listening: boolean
   accounts: Account[]
+  /** 概览「触发规则 · 存储路径」卡片用：规则 → 目标路径 */
+  rulePaths: RulePathSummary[]
   todayMessages: number
   todayMatched: number
   todayFiles: number

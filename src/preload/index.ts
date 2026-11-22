@@ -39,6 +39,7 @@ const api: Api = {
   dashboard: () => invoke(IPC.dashboard),
   setListening: (on) => invoke(IPC.listeningSet, on),
   checkNow: () => invoke(IPC.checkNow),
+  rescan: () => invoke(IPC.rescan),
   settings: {
     get: () => invoke(IPC.settingsGet),
     save: (s) => invoke(IPC.settingsSave, s)

@@ -22,6 +22,8 @@ export type Emit = (e: MainEvent) => void
 export interface SchedulerProvider {
   connect(): Promise<SyncState>
   fetchNewMessages(opts: { lastUid: number; uidValidity?: string | null; maxMessages?: number }): Promise<InboundMessage[]>
+  /** 可选：按 UID 精确补扫（新增/启用规则后重跑历史邮件） */
+  fetchByUids?(uids: number[]): Promise<InboundMessage[]>
   startIdle(onMail: () => void): Promise<void>
   stopPolling?(): void
   stopIdle(): Promise<void>
@@ -163,6 +165,48 @@ export class Scheduler {
       if (min === null || at < min) min = at
     }
     return min
+  }
+
+  /**
+   * 补扫指定 UID 的邮件（新增/启用规则后调用）。
+   * 不走游标、不改游标，只把这几封重新喂给 pipeline；已完成的会被 pipeline 去重跳过。
+   */
+  async reprocess(accountId: number, uids: number[]): Promise<{ processed: number; errors: number }> {
+    if (!this.started) return { processed: 0, errors: 0 }
+    this.syncWorkers()
+    const worker = this.workers.get(accountId)
+    const account = repos.getAccount(accountId)
+    if (!worker || !account) return { processed: 0, errors: 0 }
+    const provider = await this.getProvider(worker, account)
+    if (!provider) {
+      this.log.warn(`补扫跳过：账户 #${accountId} 没有可用连接`)
+      return { processed: 0, errors: 0 }
+    }
+    if (!provider.fetchByUids) {
+      this.log.warn(`补扫跳过：当前收信实现不支持按 UID 取信`)
+      return { processed: 0, errors: 0 }
+    }
+    await provider.connect()
+    let messages: InboundMessage[] = []
+    try {
+      messages = await provider.fetchByUids(uids)
+    } catch (e) {
+      this.log.warn(`补扫取信失败（账户 #${accountId}）`, e instanceof Error ? e.message : String(e))
+      return { processed: 0, errors: uids.length }
+    }
+    let processed = 0
+    let errors = 0
+    for (const msg of messages) {
+      try {
+        await this.deps.pipeline.process(repos.getAccount(accountId) ?? account, provider, msg)
+        processed++
+      } catch (e) {
+        errors++
+        this.log.error(`补扫处理失败 UID=${msg.uid}`, e instanceof Error ? e.message : String(e))
+      }
+    }
+    if (processed > 0) this.deps.emit({ type: 'dashboard:changed' })
+    return { processed, errors }
   }
 
   /** 立即检查所有账户（按钮「立即检查」/ 休眠恢复） */

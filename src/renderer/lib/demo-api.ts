@@ -385,6 +385,10 @@ export function createDemoApi(): Api {
       await delay(650)
       state.nextCheckAt = Date.now() + state.settings.pollIntervalSec * 1000
     },
+    rescan: async () => {
+      await delay(900)
+      state.nextCheckAt = Date.now() + state.settings.pollIntervalSec * 1000
+    },
 
     settings: {
       get: async () => clone(state.settings),
