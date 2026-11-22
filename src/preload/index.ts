@@ -33,6 +33,9 @@ const api: Api = {
     exportCsv: (q) => invoke(IPC.recordsExport, q),
     clear: () => invoke(IPC.recordsClear)
   },
+  reply: {
+    test: (to) => invoke(IPC.replyTest, to)
+  },
   dashboard: () => invoke(IPC.dashboard),
   setListening: (on) => invoke(IPC.listeningSet, on),
   checkNow: () => invoke(IPC.checkNow),

@@ -23,6 +23,8 @@ export interface Backend {
   testSavedAccount(id: number): Promise<TestResult>
   /** 启动/重启时对账并继续未完成投递 */
   reconcile(): Promise<void> | void
+  /** 用第一个启用账户的 SMTP 发一封测试信（自动回复页「发送测试信」用） */
+  testReply(to: string): Promise<{ ok: boolean; message: string; providerMessageId?: string }>
   /** 重试指定邮件的失败投递（deliveryId 省略=全部失败项） */
   retryMessage(messageId: number, deliveryId?: number): Promise<void>
   /** 应用启动时调用一次 */

@@ -11,7 +11,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test:core": "node --experimental-strip-types scripts/test-core.ts",
+    "test:core": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-core.ts",
     "pack": "electron-vite build && electron-builder --dir",
     "dist:win": "electron-vite build && electron-builder --win nsis",
     "postinstall": "electron-builder install-app-deps",

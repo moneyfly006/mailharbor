@@ -1,6 +1,6 @@
 import { matchRules, stripSubjectPrefix, normalize, isAllowedAttachment } from '../src/main/rule-engine.ts'
 import { decodeRfc2047, sanitizeFilename, uniqueNameInDir, copyIntoDir } from '../src/main/file-writer.ts'
-import { PRESETS } from '../src/main/presets.ts'
+import { PRESETS } from '../src/shared/presets.ts'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

@@ -162,6 +162,18 @@ export function registerIpc(context: IpcContext): void {
     ctx?.broadcast({ type: 'dashboard:changed' })
   })
 
+  // ---------------- 自动回复测试信 ----------------
+  ipcMain.handle(
+    IPC.replyTest,
+    async (_e, to: string): Promise<{ ok: boolean; message: string; providerMessageId?: string }> => {
+      try {
+        return await requireBackend().testReply(to)
+      } catch (e) {
+        return { ok: false, message: e instanceof Error ? e.message : String(e) }
+      }
+    }
+  )
+
   // ---------------- 概览 / 运行控制 ----------------
   ipcMain.handle(IPC.dashboard, (): DashboardData => buildDashboard())
 

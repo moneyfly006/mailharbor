@@ -40,6 +40,12 @@ export interface ReplyDecisionInput {
   selfAddresses: string[]
   autoSubmitted: boolean
   dailyCount: number
+  /** 最近一小时已回信数 */
+  hourlyCount?: number
+  /** 同线程只回一次（默认 true） */
+  threadOnce?: boolean
+  /** 每小时回信上限（不传则用默认 60） */
+  hourlyCap?: number
   circuitOpen: boolean
 }
 
@@ -68,10 +74,16 @@ export function decideReply(i: ReplyDecisionInput): ReplyDecision {
     return { action: 'suppress', replyStatus: 'suppressed', reason: '发件人就是本账户自己（避免循环回信）' }
   }
   if (NOREPLY.test(from)) return { action: 'suppress', replyStatus: 'suppressed', reason: '系统退信 / no-reply 地址，不回信' }
-  if (i.alreadySentThread) return { action: 'suppress', replyStatus: 'suppressed', reason: '同一线程已经回过信' }
+  if (i.threadOnce !== false && i.alreadySentThread) {
+    return { action: 'suppress', replyStatus: 'suppressed', reason: '同一线程已经回过信' }
+  }
   if (!i.requiredAllDone) return { action: 'wait', reason: '等待必达路径全部完成' }
-  if (i.dailyCount >= DAILY_REPLY_CAP) {
-    return { action: 'suppress', replyStatus: 'suppressed', reason: `今日回信已达上限（${DAILY_REPLY_CAP} 封）` }
+  if ((i.hourlyCount ?? 0) >= (i.hourlyCap ?? 60)) {
+    return {
+      action: 'suppress',
+      replyStatus: 'suppressed',
+      reason: `本小时回信已达上限（${i.hourlyCap ?? 60} 封），下小时自动恢复`
+    }
   }
   if (i.circuitOpen) return { action: 'wait', reason: '连续发送失败熔断中（30 分钟）' }
   return { action: 'send', reason: '全部必达路径成功，发送回信' }
@@ -118,7 +130,7 @@ export class ReplyService {
   private settings(): Settings {
     const keys = [
       'replyEnabled', 'replyDelaySec', 'replySubjectZh', 'replyBodyZh', 'replySubjectEn', 'replyBodyEn',
-      'replyLanguage', 'logLevel'
+      'replyLanguage', 'replyThreadOnce', 'replyHourlyCap', 'logLevel'
     ] as const
     const out: Record<string, unknown> = {}
     for (const k of keys) out[k] = this.deps.getSetting(k)
@@ -169,6 +181,7 @@ export class ReplyService {
     const threadKey = msg.thread_key ?? msg.rfc_message_id ?? `mid:${messageId}`
     const settings = this.settings()
     const dailyCount = repos.repliesTodayCount(account.id)
+    const hourlyCount = repos.repliesLastHourCount(account.id)
     const circuitOpen = this.isCircuitOpen(account.id)
     const alreadySentThread = repos.hasSentThread(account.id, threadKey)
 
@@ -183,6 +196,9 @@ export class ReplyService {
       // Auto-Submitted 在 pipeline 阶段已抑制；这里按「未抑制即不自动回复」处理
       autoSubmitted: false,
       dailyCount,
+      hourlyCount,
+      threadOnce: settings.replyThreadOnce !== false,
+      hourlyCap: Number(settings.replyHourlyCap) || 60,
       circuitOpen
     })
 

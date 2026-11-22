@@ -130,6 +130,13 @@ export function createDemoApi(): Api {
   }
 
   const api: Api = {
+    reply: {
+      test: async (to: string) => {
+        await delay(700)
+        if (!/@/.test(to)) return { ok: false, message: '收件邮箱格式不正确' }
+        return { ok: true, message: `测试信已发送到 ${to}（演示模式）` }
+      }
+    },
     accounts: {
       list: async () => clone(state.accounts),
       create: async (input) => {

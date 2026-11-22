@@ -27,6 +27,8 @@ export const IPC = {
   recordsOpenFolder: 'records:open-folder',
   recordsExport: 'records:export',
   recordsClear: 'records:clear',
+  // 自动回复测试信
+  replyTest: 'reply:test',
   // 概览
   dashboard: 'dashboard:get',
   listeningSet: 'listening:set',
@@ -67,6 +69,10 @@ export interface Api {
     openFolder(messageId: number, deliveryId?: number): Promise<void>
     exportCsv(q: ListRecordsQuery): Promise<{ path: string } | null>
     clear(): Promise<void>
+  }
+  reply: {
+    /** 用第一个启用账户的 SMTP 发一封测试信 */
+    test(to: string): Promise<{ ok: boolean; message: string; providerMessageId?: string }>
   }
   dashboard(): Promise<DashboardData>
   setListening(on: boolean): Promise<boolean>

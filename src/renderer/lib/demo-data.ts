@@ -685,6 +685,8 @@ export const DEMO_SETTINGS: Settings = {
   defaultPath: 'D:\\POD\\生产',
   replyEnabled: true,
   replyDelaySec: 10,
+  replyThreadOnce: true,
+  replyHourlyCap: 60,
   replySubjectZh: '图稿已收到 — {关键词} / {文件名}',
   replyBodyZh: [
     '您好，',

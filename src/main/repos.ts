@@ -1264,6 +1264,14 @@ export function repliesTodayCount(accountId: number): number {
   return r.c
 }
 
+/** 最近一小时内已发出的回信数（每小时上限用） */
+export function repliesLastHourCount(accountId: number, nowMs: number = Date.now()): number {
+  const r = db()
+    .prepare("SELECT COUNT(*) AS c FROM auto_replies WHERE account_id=? AND status='sent' AND sent_at>=?")
+    .get(accountId, nowMs - 3600_000) as { c: number }
+  return r.c
+}
+
 /** 最近一段时间内的失败回信（连续 3 次失败熔断用） */
 export function recentReplyFailures(accountId: number, sinceMs: number): number {
   const r = db()
@@ -1290,8 +1298,16 @@ function buildRecordQuery(q: ListRecordsQuery): { sql: string; params: unknown[]
   const where: string[] = []
   const params: unknown[] = []
   if (q.status && q.status !== 'all') {
-    where.push('m.status=?')
-    params.push(q.status)
+    if (q.status === 'partial') {
+      // UI 的「待重试」= 部分成功待重试 + 重试耗尽失败（都是需要人看一眼的）
+      where.push("m.status IN ('partial','failed')")
+    } else if (q.status === 'done') {
+      // 「已归档」也把历史数据里的 'done' 与 'queued' 之后的终态一起算，避免漏显示
+      where.push("m.status IN ('done')")
+    } else {
+      where.push('m.status=?')
+      params.push(q.status)
+    }
   }
   if (q.accountId != null) {
     where.push('m.account_id=?')
@@ -1302,9 +1318,13 @@ function buildRecordQuery(q: ListRecordsQuery): { sql: string; params: unknown[]
     params.push(`%${q.keyword}%`)
   }
   if (q.search) {
-    where.push('(m.subject LIKE ? OR m.from_addr LIKE ? OR m.from_name LIKE ?)')
+    // 主题 / 发件人 / 发件人显示名 / 附件文件名 / 命中关键词 都能搜
+    where.push(
+      `(m.subject LIKE ? OR m.from_addr LIKE ? OR m.from_name LIKE ? OR m.matched_keyword LIKE ?
+        OR EXISTS (SELECT 1 FROM attachments a2 WHERE a2.message_id = m.id AND a2.filename LIKE ?))`
+    )
     const s = `%${q.search}%`
-    params.push(s, s, s)
+    params.push(s, s, s, s, s)
   }
   if (q.from != null) {
     where.push('m.received_at>=?')

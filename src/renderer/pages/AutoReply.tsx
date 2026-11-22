@@ -175,6 +175,26 @@ export function AutoReply(): JSX.Element {
     [accounts]
   )
 
+  const [sendingTest, setSendingTest] = useState(false)
+  const sendTestReply = useCallback(async () => {
+    if (sendingTest) return
+    const to = replyAccount?.email
+    if (!to) {
+      pushToast('warn', '还没有可用账户', '请先在「邮箱账户」里添加账户并测试连接')
+      return
+    }
+    setSendingTest(true)
+    try {
+      const res = await api.reply.test(to)
+      if (res.ok) pushToast('success', '测试信已发送', res.message)
+      else pushToast('error', '测试信发送失败', res.message)
+    } catch (e) {
+      pushToast('error', '测试信发送失败', errMsg(e))
+    } finally {
+      setSendingTest(false)
+    }
+  }, [api, pushToast, replyAccount, sendingTest])
+
   const previewVars = useMemo(() => {
     const attachments = sample?.attachments ?? []
     const first = attachments[0]
@@ -448,15 +468,34 @@ export function AutoReply(): JSX.Element {
               </div>
             </div>
             <div className="test-row">
-              <Tooltip label="后端尚未提供「发送测试信」IPC，等接口就绪后启用">
-                <Button size="sm" icon="send" disabled>
-                  发送测试信
+              <Tooltip
+                label={
+                  replyAccount
+                    ? `用 ${replyAccount.email} 的 SMTP 发一封样张邮件到你自己`
+                    : '先在「邮箱账户」里添加账户并测试连接'
+                }
+              >
+                <Button
+                  size="sm"
+                  icon="send"
+                  disabled={!replyAccount || sendingTest}
+                  onClick={() => void sendTestReply()}
+                >
+                  {sendingTest ? '发送中…' : '发送测试信'}
                 </Button>
               </Tooltip>
-              <span className="mono">测试会按当前 SMTP 设置发一封样张到回信邮箱</span>
-              <StatusBadge tone="neutral" className="test-badge">
-                接口待接入
-              </StatusBadge>
+              <span className="mono">
+                {replyAccount ? `将发送到 ${replyAccount.email}` : '还没有可用账户'}
+              </span>
+              {replyAccount ? (
+                <StatusBadge tone="ok" className="test-badge">
+                  已接入
+                </StatusBadge>
+              ) : (
+                <StatusBadge tone="warn" className="test-badge">
+                  需先配置账户
+                </StatusBadge>
+              )}
             </div>
           </section>
         </div>
@@ -538,9 +577,14 @@ export function AutoReply(): JSX.Element {
               <Button size="sm" variant="ghost" icon="copy" onClick={() => void copyPreview()}>
                 复制预览
               </Button>
-              <Tooltip label="后端尚未提供发送测试信接口">
-                <Button size="sm" icon="send" disabled>
-                  发送测试信
+              <Tooltip label={replyAccount ? `发送到 ${replyAccount.email}` : '先在「邮箱账户」里添加账户'}>
+                <Button
+                  size="sm"
+                  icon="send"
+                  disabled={!replyAccount || sendingTest}
+                  onClick={() => void sendTestReply()}
+                >
+                  {sendingTest ? '发送中…' : '发送测试信'}
                 </Button>
               </Tooltip>
             </span>

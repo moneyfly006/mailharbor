@@ -230,6 +230,10 @@ export interface Settings {
   defaultPath: string
   replyEnabled: boolean
   replyDelaySec: number
+  /** 同一线程只回一次（默认 true，防回信轰炸） */
+  replyThreadOnce: boolean
+  /** 每小时回信上限（默认 60，防账号被风控） */
+  replyHourlyCap: number
   replySubjectZh: string
   replyBodyZh: string
   replySubjectEn: string

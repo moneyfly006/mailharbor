@@ -72,6 +72,8 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   defaultPath: '',
   replyEnabled: true,
   replyDelaySec: 10,
+  replyThreadOnce: true,
+  replyHourlyCap: 60,
   replyLanguage: 'en',
   replySubjectZh: '图稿已收到 · {关键词}',
   replyBodyZh: '您好，\n\n已收到您的图稿（{数量} 个文件）：\n{文件名}\n\n我们会尽快安排处理，如需补充请直接回复本邮件。\n\n{工厂名}',

@@ -19,7 +19,7 @@ import { Scheduler, type SchedulerProvider } from './scheduler'
 import {
   providerConfigFromAccount, providerConfigFromInput, testConnection, type ProviderConfig
 } from './providers/imap'
-import { sendReply as smtpSendReply, type ReplyRequest, type SendReplyResult } from './smtp'
+import { sendReply as smtpSendReply, buildReplyVars, renderTemplate, type ReplyRequest, type SendReplyResult } from './smtp'
 import { setLogLevel } from './log'
 import type { Backend } from './services'
 
@@ -72,6 +72,15 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     }
   }
   const now = deps.now ?? ((): number => Date.now())
+  /** 账户状态变化后推给 UI（列表/概览都靠它刷新） */
+  const emitAccountChanged = (id: number): void => {
+    try {
+      const acc = repos.getAccount(id)
+      if (acc) emit({ type: 'account:changed', account: acc })
+    } catch {
+      /* ignore */
+    }
+  }
 
   configureRepos({ db: deps.db, codec: deps.codec })
   try {
@@ -145,13 +154,82 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     async testSavedAccount(id: number): Promise<TestResult> {
       const account = repos.getAccount(id)
       if (!account) throw new Error('账户不存在或已被删除')
-      if (!account.hasPassword) return failedTest('该账户尚未保存密码，请编辑账户重新填写', 'imap')
+      if (!account.hasPassword) {
+        repos.setAccountStatus(id, 'auth_failed', { errorCode: 'PASSWORD_MISSING', error: '尚未保存密码' })
+        emitAccountChanged(id)
+        return failedTest('该账户尚未保存密码，请编辑账户重新填写', 'imap')
+      }
       const secrets = repos.getAccountSecrets(id)
       const cfg = providerConfigFromAccount(account, secrets)
+      let result: TestResult
       try {
-        return await testConnection(cfg)
+        result = await testConnection(cfg)
       } catch (e) {
-        return failedTest(`测试连接失败：${e instanceof Error ? e.message : String(e)}`, 'imap')
+        result = failedTest(`测试连接失败：${e instanceof Error ? e.message : String(e)}`, 'imap')
+      }
+      // 测试结果直接反映到账户状态：全绿 = 可收信；认证类失败 = auth_failed；网络类 = conn_failed
+      const errLine = result.lines.find((l) => !l.ok)
+      if (result.ok) {
+        repos.setAccountStatus(id, account.enabled ? 'enabled' : 'pending_test', {
+          checked: true,
+          ok: true,
+          errorCode: null,
+          error: null
+        })
+      } else {
+        const authFailed = errLine?.errorCode === 'IMAP_AUTH_FAILED' || errLine?.errorCode === 'SMTP_AUTH_FAILED'
+        repos.setAccountStatus(id, authFailed ? 'auth_failed' : 'conn_failed', {
+          checked: true,
+          ok: false,
+          errorCode: errLine?.errorCode ?? 'UNKNOWN',
+          error: errLine?.message ?? '测试连接失败'
+        })
+      }
+      emitAccountChanged(id)
+      return result
+    },
+    async testReply(to: string): Promise<{ ok: boolean; message: string; providerMessageId?: string }> {
+      const target = (to ?? '').trim()
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(target)) {
+        return { ok: false, message: '收件邮箱格式不正确' }
+      }
+      const accounts = repos.listAccounts().filter((a) => a.enabled && a.hasPassword)
+      const account = accounts[0]
+      if (!account) return { ok: false, message: '没有已启用且配置了密码的账户，请先在「邮箱账户」里添加并测试通过' }
+      const secrets = repos.getAccountSecrets(account.id)
+      const cfg = providerConfigFromAccount(account, secrets)
+      const smtpCfg = {
+        host: cfg.smtpHost,
+        port: cfg.smtpPort,
+        secure: cfg.smtpSecure,
+        user: cfg.smtpUser,
+        pass: cfg.smtpPass
+      }
+      const settings = deps.getSetting as <T>(k: string) => T
+      const lang = String(settings('replyLanguage') ?? 'en')
+      const subjectTpl = String(
+        lang === 'zh' ? settings('replySubjectZh') : settings('replySubjectEn')
+      )
+      const bodyTpl = String(lang === 'zh' ? settings('replyBodyZh') : settings('replyBodyEn'))
+      const vars = buildReplyVars({
+        filenames: ['POD_ORDER_TEST.zip', '设计图_测试.tif'],
+        keyword: '原图+卡套',
+        sentAt: Date.now(),
+        factoryName: account.smtpFromName || 'MailHarbor'
+      })
+      try {
+        const res = await (deps.sendReply ?? smtpSendReply)(smtpCfg as never, {
+          from: { name: account.smtpFromName || 'MailHarbor', address: account.email },
+          to: { address: target },
+          subject: renderTemplate(subjectTpl, vars),
+          body: renderTemplate(bodyTpl, vars)
+        })
+        emit({ type: 'toast', level: 'success', title: '测试信已发送', body: `收件人 ${target}` })
+        return { ok: true, message: `测试信已发送到 ${target}`, providerMessageId: res.providerMessageId }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        emit({ type: 'toast', level: 'error', title: '测试信发送失败', body: msg })
+        return { ok: false, message: msg }
       }
     },
     async reconcile(): Promise<void> {
