@@ -1,14 +1,16 @@
 /**
- * SQLite 数据层（better-sqlite3，WAL）。
+ * SQLite 数据层（WAL）。
+ * 驱动由 sqlite.ts 适配：开发用 better-sqlite3，打包后回退 Electron 内置 node:sqlite，
+ * 因此 Windows 安装包不需要按平台重编译原生模块。
  * 表结构与 docs/ARCHITECTURE.md §4 对齐；密码字段用 Electron safeStorage 加密后存 BLOB。
  */
-import Database from 'better-sqlite3'
 import { app, safeStorage } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { SCHEMA } from './schema'
+import { openSqlite, type Db } from './sqlite'
 
-export type DB = Database.Database
+export type DB = Db
 let db: DB | null = null
 
 
@@ -21,7 +23,7 @@ export function openDb(customPath?: string): DB {
   if (db) return db
   const path = customPath ?? getDbPath()
   mkdirSync(dirname(path), { recursive: true })
-  db = new Database(path)
+  db = openSqlite(path)
   db.exec(SCHEMA)
   db.prepare(`INSERT OR REPLACE INTO schema_meta(key,value) VALUES('version','1')`).run()
   return db

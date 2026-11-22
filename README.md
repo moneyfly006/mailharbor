@@ -32,7 +32,8 @@ E:\POD\备份\卡套\POD_ORDER_20486.zip  ✔
 | 3. 可点击原型（HTML demo） | ⏳ 待客户确认设计后 | `design/prototype/` |
 | 4. 应用开发（Electron + Windows 打包） | ✅ **MVP 已完成** | `src/`（19.8k 行，双端 typecheck + build 通过） |
 | 5. 本地联调（模拟 IMAP/SMTP 服务器） | ✅ 完成 | `scripts/mock-mail-server.mjs`，e2e 69 断言全过 |
-| 6. Windows 安装包 | ⏳ 待 Windows 机器/CI 执行 | `pnpm dist:win` |
+| 6. **Windows 安装包** | ✅ **已产出** | `release/MailHarbor-Setup-0.1.0.exe`（117 MB，见 [构建说明](docs/BUILD-WINDOWS.md)） |
+| 7. 真机验收（Windows） | ⏳ 需一台 Windows 机器 | 安装→自启→真实邮箱收发 |
 
 **工期估算**：34–36 人天（含 15% 缓冲 39–41 人天）；2 人并行约 5 周，1 人约 8–9 周。其中「IMAP 收信 + 中文文件名解析 + 规则引擎 + 多路径扇出 + 部分失败恢复」单列 14–16 人天，是最大复杂点。
 
@@ -99,6 +100,27 @@ mail-harbor/
 | 本地模拟邮件服务器（无真实邮箱也能跑通全链路） | ✅ |
 
 **验证结果**：`tsc --noEmit`（主进程 + 渲染层）通过 · `electron-vite build` 通过 · 核心 29 断言 + 后端 376 断言全过（含 mock IMAP/SMTP 端到端：双路径落盘、SMTP 回信、幂等复跑、部分路径失败只重试失败项、IDLE 自动收信）。
+
+## Windows 安装包
+
+**产物**：`release/MailHarbor-Setup-0.1.0.exe`（NSIS，x64，按用户安装、免管理员，117 MB）
+
+```bash
+# 已构建好；重新构建：
+ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
+  pnpm build:win
+```
+
+关键设计：原生模块 `better-sqlite3` 只在开发期使用，**运行时自动回退到 Electron 内置 `node:sqlite`**
+（`src/main/sqlite.ts`），所以安装包不含平台相关的 `.node`，macOS 也能交叉打出 Windows 包。
+
+打包运行时验证（等价于 Windows 包内的运行环境）：
+
+```bash
+pnpm test:packaged     # 16 项断言：建账户→测连接→建规则→收信→双路径落盘→SMTP 回信→记录
+```
+
+详见 [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md)（安装行为、签名步骤、真机验收清单、升级回滚）。
 
 ## 本地运行
 

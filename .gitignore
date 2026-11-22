@@ -10,3 +10,5 @@ data/
 logs/
 out/
 *.tsbuildinfo
+release/
+out/types-node/

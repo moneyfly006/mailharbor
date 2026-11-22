@@ -21,9 +21,12 @@ import { dirname, resolve } from 'node:path'
 // ---------------------------------------------------------------------------
 // 装配 / 类型
 // ---------------------------------------------------------------------------
+/** node:sqlite 的 BLOB 读出来是 Uint8Array，better-sqlite3 是 Buffer，两者都接受 */
+export type SecretBlob = Buffer | Uint8Array | null | undefined
+
 export interface SecretsCodec {
   encrypt(plain: string): Buffer
-  decrypt(buf: Buffer | null | undefined): string
+  decrypt(buf: SecretBlob): string
 }
 
 /** 兜底编解码器：仅用于测试 / 没有 electron safeStorage 的场景（与 db.ts 的 plain: 前缀兼容） */
@@ -31,7 +34,7 @@ export const PLAIN_CODEC: SecretsCodec = {
   encrypt: (plain) => (plain ? Buffer.from(`plain:${plain}`, 'utf8') : Buffer.alloc(0)),
   decrypt: (buf) => {
     if (!buf || buf.length === 0) return ''
-    const s = buf.toString('utf8')
+    const s = Buffer.from(buf).toString('utf8')
     return s.startsWith('plain:') ? s.slice(6) : ''
   }
 }
@@ -93,14 +96,14 @@ export interface AccountRow {
   imap_port: number
   imap_secure: Encryption
   imap_user: string
-  imap_pass_enc: Buffer | null
+  imap_pass_enc: SecretBlob
   smtp_host: string
   smtp_port: number
   smtp_secure: Encryption
   smtp_user: string
   smtp_from_name: string | null
   smtp_same_as_imap: number
-  smtp_pass_enc: Buffer | null
+  smtp_pass_enc: SecretBlob
   last_check_at: number | null
   last_ok_at: number | null
   last_error_code: string | null
@@ -456,12 +459,13 @@ export function updateAccount(id: number, input: AccountInput): Account {
   if (!input.imapHost?.trim()) throw new Error('请填写 IMAP 服务器地址')
   if (!input.smtpHost?.trim()) throw new Error('请填写 SMTP 服务器地址')
 
-  const newImapPass = input.password ? codec.encrypt(input.password) : old.imap_pass_enc
+  const toBuffer = (b: SecretBlob): Buffer | null => (b ? Buffer.from(b) : null)
+  const newImapPass = input.password ? codec.encrypt(input.password) : toBuffer(old.imap_pass_enc)
   const smtpSame = !!input.smtpSameAsImap
   let newSmtpPass: Buffer | null
-  if (smtpSame) newSmtpPass = input.password ? codec.encrypt(input.password) : old.smtp_pass_enc
+  if (smtpSame) newSmtpPass = input.password ? codec.encrypt(input.password) : toBuffer(old.smtp_pass_enc)
   else if (input.smtpPassword) newSmtpPass = codec.encrypt(input.smtpPassword)
-  else newSmtpPass = old.smtp_pass_enc
+  else newSmtpPass = toBuffer(old.smtp_pass_enc)
 
   const changedConfig =
     'password' in input && !!input.password

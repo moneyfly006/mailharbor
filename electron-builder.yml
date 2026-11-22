@@ -1,22 +1,46 @@
 appId: com.mailharbor.app
 productName: MailHarbor
+copyright: Copyright © 2026 MailHarbor
+
 directories:
   output: release
   buildResources: resources
+
 files:
   - out/**
   - resources/**
-asarUnpack:
-  - "**/node_modules/better-sqlite3/**"
+  - package.json
+
+# 运行时用 Electron 内置 node:sqlite，无需为每个平台重编译原生模块
+npmRebuild: false
+
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+
 win:
   target:
     - target: nsis
       arch: [x64]
+  icon: resources/icon.ico
   artifactName: MailHarbor-Setup-${version}.${ext}
+  # macOS 上没有 wine，跳过 rcedit（exe 图标/版本信息用 NSIS 安装时写）
+  signAndEditExecutable: false
+
 nsis:
   oneClick: false
   perMachine: false
+  allowElevation: true
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: MailHarbor
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+
+linux:
+  target: [AppImage]
+  category: Office
+
+mac:
+  target: [dir]
+  category: public.app-category.productivity
