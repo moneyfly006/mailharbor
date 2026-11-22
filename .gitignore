@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+build/
+design/exports/*.png
+.DS_Store
+data/
+logs/

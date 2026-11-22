@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MailHarbor 设计说明书 · v0.2</title>
+<style>
+  :root{
+    --paper-000:#FDFBF6; --paper-050:#FCFAF4; --paper-100:#FAF7F0; --paper-200:#F5F1E7;
+    --paper-300:#EFEADD; --paper-400:#E5DDCC; --paper-500:#D8CEBA;
+    --ink-950:#0E151D; --ink-900:#16202B; --ink-700:#333F4C; --ink-600:#4A5561;
+    --ink-500:#5E6873; --ink-400:#7C858F; --vermilion-500:#C8422D; --vermilion-600:#A83321;
+    --green-600:#2C6B4B; --amber-600:#96660F; --red-600:#B4341F;
+    --serif:"Songti SC","Source Han Serif SC","Noto Serif SC",Georgia,serif;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --mono:"SF Mono",ui-monospace,"Cascadia Mono",Menlo,monospace;
+    --hair:1px solid rgba(22,32,43,.10);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--paper-100);color:var(--ink-900);
+       font-family:var(--sans);font-size:16px;line-height:1.75;
+       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  ::selection{background:rgba(200,66,45,.14)}
+  a{color:var(--vermilion-600);text-decoration:none;border-bottom:1px solid rgba(200,66,45,.3)}
+  .wrap{max-width:1240px;margin:0 auto;padding:0 40px}
+
+  /* ---------- 顶部导航 ---------- */
+  .nav{position:sticky;top:0;z-index:20;background:rgba(250,247,240,.88);
+       backdrop-filter:blur(10px);border-bottom:var(--hair)}
+  .nav .wrap{display:flex;align-items:center;gap:28px;height:60px}
+  .brand{display:flex;align-items:baseline;gap:10px;font-family:var(--serif)}
+  .brand b{font-size:19px;letter-spacing:.02em}
+  .brand span{font-size:11px;color:var(--ink-400);letter-spacing:.22em;text-transform:uppercase}
+  .nav ul{display:flex;gap:22px;margin:0 0 0 auto;padding:0;list-style:none;font-size:13.5px}
+  .nav a{border:0;color:var(--ink-600);padding:4px 0}
+  .nav a:hover{color:var(--ink-900)}
+  .stamp{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--vermilion-600);
+         border:1px solid rgba(200,66,45,.35);border-radius:2px;padding:3px 8px}
+
+  /* ---------- 封面 ---------- */
+  .hero{padding:96px 0 72px;border-bottom:var(--hair);position:relative;overflow:hidden}
+  .hero:before{content:"";position:absolute;inset:0;
+    background-image:radial-gradient(rgba(22,32,43,.055) 1px,transparent 1px);
+    background-size:22px 22px;mask-image:linear-gradient(180deg,transparent,#000 30%,transparent 92%)}
+  .hero .wrap{position:relative}
+  .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.34em;color:var(--vermilion-600);margin-bottom:26px}
+  h1{font-family:var(--serif);font-weight:600;font-size:64px;line-height:1.14;letter-spacing:-.01em;margin:0 0 26px}
+  h1 em{font-style:normal;color:var(--vermilion-600)}
+  .lede{max-width:760px;font-size:19px;line-height:1.85;color:var(--ink-700);margin:0 0 40px}
+  .metarow{display:flex;flex-wrap:wrap;gap:38px;padding-top:26px;border-top:var(--hair)}
+  .metarow div{min-width:150px}
+  .metarow dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;color:var(--ink-400);text-transform:uppercase;margin-bottom:5px}
+  .metarow dd{margin:0;font-size:15px;color:var(--ink-900)}
+
+  /* ---------- 通用节 ---------- */
+  section{padding:76px 0;border-bottom:var(--hair)}
+  .sechead{display:flex;align-items:baseline;gap:18px;margin-bottom:14px}
+  .secno{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--vermilion-600)}
+  h2{font-family:var(--serif);font-size:34px;font-weight:600;margin:0;letter-spacing:.01em}
+  .secdesc{max-width:820px;color:var(--ink-600);margin:0 0 44px;font-size:16px}
+
+  /* ---------- 一句话流程 ---------- */
+  .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border:var(--hair);background:var(--paper-050)}
+  .step{padding:26px 22px;border-right:var(--hair);position:relative}
+  .step:last-child{border-right:0}
+  .step .n{font-family:var(--mono);font-size:11px;color:var(--ink-400);letter-spacing:.14em}
+  .step h4{font-family:var(--serif);font-size:17px;margin:10px 0 6px;font-weight:600}
+  .step p{margin:0;font-size:13px;line-height:1.7;color:var(--ink-600)}
+  .step .ic{position:absolute;top:24px;right:20px;opacity:.5}
+
+  /* ---------- 视觉语言 ---------- */
+  .lang{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:start}
+  .swatches{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .sw{border:var(--hair);background:var(--paper-050)}
+  .sw .chip{height:96px}
+  .sw .txt{padding:10px 12px;border-top:var(--hair)}
+  .sw b{display:block;font-size:13px;font-weight:600}
+  .sw code{font-family:var(--mono);font-size:11px;color:var(--ink-500)}
+  .typegroup li{list-style:none;padding:14px 0;border-bottom:var(--hair)}
+  .typegroup{padding:0;margin:0}
+  .typegroup .lab{font-family:var(--mono);font-size:10.5px;color:var(--ink-400);letter-spacing:.14em;display:block;margin-bottom:4px}
+  .t-serif{font-family:var(--serif);font-size:30px;line-height:1.25}
+  .t-sans{font-size:17px}
+  .t-mono{font-family:var(--mono);font-size:13.5px;letter-spacing:.02em}
+  .principles{margin:0;padding:0;list-style:none}
+  .principles li{display:flex;gap:14px;padding:13px 0;border-bottom:var(--hair);font-size:14.5px;color:var(--ink-700)}
+  .principles .k{font-family:var(--mono);font-size:10.5px;color:var(--vermilion-600);letter-spacing:.14em;min-width:30px;padding-top:4px}
+
+  /* ---------- 屏幕卡 ---------- */
+  .screen{margin:0 0 72px}
+  .screen:last-child{margin-bottom:0}
+  .screen .head{display:flex;align-items:flex-end;gap:18px;margin-bottom:8px}
+  .screen .idx{font-family:var(--mono);font-size:12px;color:var(--vermilion-600);letter-spacing:.16em;padding-bottom:6px}
+  .screen h3{font-family:var(--serif);font-size:25px;font-weight:600;margin:0}
+  .screen .tag{margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+    padding:3px 9px;border:1px solid var(--paper-500);color:var(--ink-500);border-radius:2px}
+  .screen .tag.core{border-color:rgba(200,66,45,.4);color:var(--vermilion-600);background:rgba(200,66,45,.05)}
+  .screen .about{color:var(--ink-600);font-size:14.5px;margin:0 0 22px;max-width:900px}
+  .frame{border:1px solid rgba(22,32,43,.16);background:var(--paper-200);
+         padding:10px;border-radius:8px;box-shadow:0 24px 60px -32px rgba(14,21,29,.4),0 2px 0 rgba(22,32,43,.04)}
+  .frame .bar{display:flex;gap:6px;align-items:center;padding:2px 6px 10px}
+  .frame .bar i{width:9px;height:9px;border-radius:50%;background:var(--paper-500);display:block}
+  .frame img{display:block;width:100%;border-radius:3px;border:var(--hair);background:var(--paper-050)}
+  .shots{display:grid;grid-template-columns:1fr;gap:18px}
+  .shot{border-top:var(--hair);padding-top:16px;display:grid;grid-template-columns:120px 1fr;gap:20px}
+  .shot .num{font-family:var(--mono);font-size:11px;color:var(--ink-400);letter-spacing:.14em}
+  .shot h4{font-family:var(--serif);font-size:16px;margin:0 0 3px;font-weight:600}
+  .shot p{margin:0;font-size:13.5px;color:var(--ink-600);line-height:1.7}
+
+  /* ---------- 状态总览 ---------- */
+  .states{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .state{border:var(--hair);background:var(--paper-050);padding:18px 18px 16px}
+  .state .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:8px;transform:translateY(-1px)}
+  .state b{font-size:14px}
+  .state p{margin:8px 0 0;font-size:12.5px;color:var(--ink-600);line-height:1.65}
+
+  /* ---------- 待确认 ---------- */
+  .qs{counter-reset:q;padding:0;margin:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:0 36px}
+  .qs li{display:flex;gap:14px;padding:16px 0;border-bottom:var(--hair);font-size:14px;color:var(--ink-700)}
+  .qs li:before{counter-increment:q;content:"Q" counter(q);font-family:var(--mono);font-size:11px;
+    color:var(--vermilion-600);letter-spacing:.1em;padding-top:4px;min-width:26px}
+  .qs li b{color:var(--ink-900);font-weight:600}
+
+  /* ---------- 文件清单 ---------- */
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:12px 10px;border-bottom:var(--hair);vertical-align:top}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--ink-400);text-transform:uppercase;font-weight:500}
+  td code{font-family:var(--mono);font-size:12px;background:var(--paper-200);padding:2px 6px;border-radius:2px}
+
+  /* ---------- 细节放大 ---------- */
+  .detail-grid{display:grid;grid-template-columns:1fr;gap:22px;align-items:start}
+  .detail{margin:0;border:var(--hair);background:var(--paper-050);padding:14px}
+  .detail.full{grid-column:1/-1}
+  .detail-grid{grid-template-columns:1fr 1fr}
+  .detail.full{grid-column:1/-1}
+  .detail.pair{grid-column:span 1}
+  .detail img{max-height:520px;width:auto;max-width:100%;margin:0 auto}
+  .detail img{display:block;width:100%;border:var(--hair);background:var(--paper-200)}
+  .detail figcaption{margin-top:12px;font-size:13px;line-height:1.7;color:var(--ink-600)}
+  .detail figcaption b{display:block;font-family:var(--serif);font-size:15px;color:var(--ink-900);margin-bottom:4px;font-weight:600}
+  @media (max-width:1080px){.detail-grid{grid-template-columns:1fr}}
+
+  /* ---------- 状态枚举表 ---------- */
+  .enumwrap{margin-top:44px}
+  .enumwrap h3{font-family:var(--serif);font-size:20px;margin:0 0 6px;font-weight:600}
+  .enumwrap p{color:var(--ink-600);font-size:14px;margin:0 0 18px}
+  .enum{width:100%;border-collapse:collapse;font-size:13px;background:var(--paper-050);border:var(--hair)}
+  .enum th,.enum td{text-align:left;padding:9px 12px;border-bottom:var(--hair);vertical-align:top}
+  .enum th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-400);text-transform:uppercase;font-weight:500;background:var(--paper-200)}
+  .enum td:first-child{font-family:var(--mono);font-size:11.5px;color:var(--ink-700);white-space:nowrap}
+  .enum .g{color:var(--green-600)} .enum .a{color:var(--amber-600)} .enum .r{color:var(--red-600)} .enum .n{color:var(--ink-400)}
+
+  footer{padding:56px 0 80px;color:var(--ink-500);font-size:13px}
+  footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .missing{border:1px dashed var(--paper-500);padding:40px;text-align:center;color:var(--ink-400);font-size:13.5px;background:var(--paper-050)}
+  @media (max-width:1080px){
+    h1{font-size:44px}.flow{grid-template-columns:1fr}.step{border-right:0;border-bottom:var(--hair)}
+    .lang{grid-template-columns:1fr}.states{grid-template-columns:1fr 1fr}.qs{grid-template-columns:1fr}
+    .shot{grid-template-columns:1fr}
+  }
+  @media print{
+    .nav{display:none}section{padding:28px 0;break-inside:avoid}
+    body{font-size:12px}.frame{box-shadow:none}
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav"><div class="wrap">
+  <div class="brand"><b>MailHarbor</b><span>Design Doc</span></div>
+  <ul>
+    <li><a href="#flow">流程</a></li>
+    <li><a href="#language">视觉语言</a></li>
+    <li><a href="#screens">设计图</a></li>
+    <li><a href="#states">状态</a></li>
+    <li><a href="#questions">待确认</a></li>
+  </ul>
+  <span class="stamp">v0.2 / 2026-11-22</span>
+</div></nav>
+
+<!-- ================= 封面 ================= -->
+<header class="hero"><div class="wrap">
+  <div class="kicker">邮件收货助手 · WINDOWS DESKTOP APP · 高保真设计图</div>
+  <h1>客户发来的图稿，<br>自己<em>落进该去的文件夹</em>。</h1>
+  <p class="lede">
+    MailHarbor 常驻在一台不关机的 Windows 电脑上，通过 IMAP 盯着工厂邮箱（回信用 SMTP）：客户邮件的标题里写着
+    「原图+手机壳 / 原图+卡套 / 原图+浴室垫」，软件识别到关键词后，把 ZIP、TIF 附件自动复制到
+    该品类对应的一个或多个本地文件夹，并回信告诉客户「已收到」。
+  </p>
+  <dl class="metarow">
+    <div><dt>Client</dt><dd>POD 定制工厂（斌）</dd></div>
+    <div><dt>Platform</dt><dd>Windows 10 / 11 x64</dd></div>
+    <div><dt>Baseline</dt><dd>1440 × 900</dd></div>
+    <div><dt>Screens</dt><dd>5 屏 + 组件总览</dd></div>
+    <div><dt>Status</dt><dd>待客户确认</dd></div>
+  </dl>
+</div></header>
+
+<!-- ================= 流程 ================= -->
+<section id="flow"><div class="wrap">
+  <div class="sechead"><span class="secno">01</span><h2>它每天替你做什么</h2></div>
+  <p class="secdesc">整条链路只有一件事需要人来做：在规则页把新的品类关键词和它该去的文件夹加上。其余全自动。</p>
+  <div class="flow">
+    <div class="step"><span class="n">01 / 收</span><h4>盯信箱</h4><p>IMAP 待命、有新信即时发现，掉线自动重连补扫，不占带宽、不占人手。</p></div>
+    <div class="step"><span class="n">02 / 认</span><h4>认关键词</h4><p>标题命中「原图+卡套」→ 这条单归卡套；没命中就跳过，不误存。</p></div>
+    <div class="step"><span class="n">03 / 落</span><h4>多路径落盘</h4><p>同一份附件复制到该品类配置的每个文件夹（生产 + 备份）。</p></div>
+    <div class="step"><span class="n">04 / 回</span><h4>回信确认</h4><p>全部必达路径成功后，自动回一封「已收到，共 N 个文件」。</p></div>
+    <div class="step"><span class="n">05 / 记</span><h4>留痕可查</h4><p>谁、什么时候、命中哪条规则、存到哪几个路径，全部可查可重试。</p></div>
+  </div>
+</div></section>
+
+<!-- ================= 视觉语言 ================= -->
+<section id="language"><div class="wrap">
+  <div class="sechead"><span class="secno">02</span><h2>视觉语言：纸与墨</h2></div>
+  <p class="secdesc">
+    客户的行业是印刷定制，软件就该长得像车间里那张工单，而不是又一个通用后台。
+    暖米白是未涂布的纸，深墨蓝是印上去的字，朱红只用来标「这一条要人看一眼」。
+    中文排版是主角：标题宋体、正文苹方、数字全用等宽对齐。
+  </p>
+  <div class="lang">
+    <div>
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:#FAF7F0"></div><div class="txt"><b>纸 · 画布</b><code>#FAF7F0</code></div></div>
+        <div class="sw"><div class="chip" style="background:#16202B"></div><div class="txt"><b>墨 · 正文</b><code>#16202B</code></div></div>
+        <div class="sw"><div class="chip" style="background:#C8422D"></div><div class="txt"><b>朱红 · 强调</b><code>#C8422D</code></div></div>
+        <div class="sw"><div class="chip" style="background:#2C6B4B"></div><div class="txt"><b>松绿 · 成功/运行</b><code>#2C6B4B</code></div></div>
+        <div class="sw"><div class="chip" style="background:#96660F"></div><div class="txt"><b>赭黄 · 待处理</b><code>#96660F</code></div></div>
+        <div class="sw"><div class="chip" style="background:#B4341F"></div><div class="txt"><b>铁锈红 · 失败</b><code>#B4341F</code></div></div>
+      </div>
+      <div class="missing" style="margin-top:14px;padding:18px;text-align:left">
+        <b style="color:var(--ink-700)">三层令牌</b> · <code style="font-family:var(--mono);font-size:12px">design/tokens.css</code>：
+        纸 6 级 / 墨 9 级 / 朱红 6 级 / 状态色 4 组，全部收敛为语义变量，开发只引用语义层。
+      </div>
+    </div>
+    <div>
+      <ul class="typegroup">
+        <li><span class="lab">DISPLAY · 宋体 / SONG</span><div class="t-serif">原图 + 卡套 · 今日已收 128 件</div></li>
+        <li><span class="lab">BODY · 苹方 / PINGFANG</span><div class="t-sans">下载成功后会自动回信，客户不用再问「收到没」。</div></li>
+        <li><span class="lab">DATA · 等宽 / MONO</span><div class="t-mono">2026-11-22 15:44&nbsp;&nbsp;24.8 MB&nbsp;&nbsp;D:\POD\生产\卡套</div></li>
+      </ul>
+      <ul class="principles">
+        <li><span class="k">P1</span><span><b>路径永远是可见的。</b>客户反复强调「把存储路径暴露出来」——所以路径不做折叠，直接可点、可打开。</span></li>
+        <li><span class="k">P2</span><span><b>一条规则的多路径必须一眼看全。</b>「原图+卡套存 2 个路径」是客户特意点出的注意点，用平铺路径条表达，不能藏进设置。</span></li>
+        <li><span class="k">P3</span><span><b>异常只上橙色，不弹窗。</b>7×24 常驻，弹窗会打断别的程序；但静默失败等于丢件，用横幅 + 状态点 + 记录页三重可见。</span></li>
+        <li><span class="k">P4</span><span><b>数字像工单。</b>收件数、文件大小、剩余空间全部等宽对齐，扫一眼就能对账。</span></li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<!-- ================= 设计图 ================= -->
+<section id="screens"><div class="wrap">
+  <div class="sechead"><span class="secno">03</span><h2>高保真设计图</h2></div>
+  <p class="secdesc">设计基准 1440×900。以下按软件左侧导航从「概览」到「记录」排列，第 03 屏是整套设计的核心。</p>
+
+  <div class="screen">
+    <div class="head"><span class="idx">01</span><h3>概览 · 今天有没有在干活</h3><span class="tag">每日第一眼</span></div>
+    <p class="about">操作员每天上班只看这一屏：软件在不在跑、邮箱通不通、今天收了多少件、哪些盘快满了、最近收到的是什么。所有异常都从这里点进去。</p>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div>
+      <img src="exports/01-dashboard.png" alt="概览" onerror="this.parentNode.parentNode.querySelector('.head .tag').textContent='待渲染'">
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="head"><span class="idx">02</span><h3>邮箱账户 · 换号不用找我们</h3><span class="tag">SMTP / IMAP</span></div>
+    <p class="about">客户明确要求：<b>用 SMTP，不要授权</b>。所以账户页是熟悉的邮箱参数表单——选服务商预设（Gmail / QQ / Outlook / 自定义）→ 填 IMAP 收件与 SMTP 发件参数（Gmail 用应用专用密码、QQ 用授权码）→ 点「测试连接」分别验证收发，通过即启用。邮箱不写死，出问题随时改、随时停。</p>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div>
+      <img src="exports/02-accounts.png" alt="邮箱账户">
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="head"><span class="idx">03</span><h3>触发规则 · 什么单、进哪个夹子</h3><span class="tag core">核心屏</span></div>
+    <p class="about">整套软件的大脑。左边是关键词清单（预设三条，可增可删可停），右边编辑选中规则：匹配方式、<b>目标路径 1~N 条</b>、附件类型、是否回信。
+      「原图+卡套」这一条，就配了两个路径——生产盘和备份盘。</p>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div>
+      <img src="exports/03-rules.png" alt="触发规则">
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="head"><span class="idx">04</span><h3>自动回复 · 让客户安心</h3><span class="tag">模板可编辑</span></div>
+    <p class="about">文件和回信是两件事：只有必达路径全部落盘成功才回信，同一线程只回一次，避免客户收到一串重复邮件。模板中英文可切换，变量点一下就插入，右侧是真实邮件样子。</p>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div>
+      <img src="exports/04-autoreply.png" alt="自动回复">
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="head"><span class="idx">05</span><h3>下载记录 · 出问题找得到件</h3><span class="tag">可对账</span></div>
+    <p class="about">每一封邮件、每个附件、每个目标路径都留痕。两个路径都成功就是两个绿勾；备份盘挂了就红叉 + 原因，点「重试」只补那一份，成功的路径不会重复写。</p>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div>
+      <img src="exports/05-records.png" alt="下载记录">
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="head"><span class="idx">06</span><h3>组件与状态 · 交给开发照着做</h3><span class="tag">规范</span></div>
+    <p class="about">按钮、输入框、开关、徽章、表格、Toast、空状态、托盘菜单的完整状态表，保证后续实现和设计图一致。</p>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div>
+      <img src="exports/06-components.png" alt="组件">
+    </div>
+  </div>
+</div></section>
+
+<!-- ================= 细节放大 ================= -->
+<section id="details"><div class="wrap">
+  <div class="sechead"><span class="secno">03.5</span><h2>关键细节放大看</h2></div>
+  <p class="secdesc">整屏图缩放后会看不清细节，这里把客户最在意的四处按原尺寸裁出来。</p>
+  <div class="detail-grid">
+    <figure class="detail full">
+      <img src="exports/details/rules-multi-path.png" alt="一条规则多个目标路径">
+      <figcaption><b>① 一条关键词 → 多个文件夹</b>「原图+卡套」同时配了 D 生产盘、E 备份盘、F 归档盘；每条路径都有剩余空间、必达开关、打开与删除。F 盘没接上时单独标红并注明「不影响其他路径」——这就是客户说的"同一份文件存 2 个本地路径"。</figcaption>
+    </figure>
+    <figure class="detail pair">
+      <img src="exports/details/rules-keyword-list.png" alt="关键词清单">
+      <figcaption><b>② 关键词可预设、可新增、可删除</b>出厂预置「原图+手机壳 / 原图+卡套 / 原图+浴室垫」，老板随时加点新品类；停用和删除是两件事，删除时还提示"已下载的文件和记录会保留"。</figcaption>
+    </figure>
+    <figure class="detail tall">
+      <img src="exports/details/accounts-form.png" alt="邮箱参数与测试连接">
+      <figcaption><b>③ 填参数、测连接，不搞授权</b>服务商预设自动填主机端口；<b>收件走 IMAP、发件走 SMTP</b>（SMTP 只能发不能收，别把两者搞混）；点「测试连接」分别验证并各自报错；密码只存在这台电脑上（Windows DPAPI 加密）。</figcaption>
+    </figure>
+    <figure class="detail wide">
+      <img src="exports/details/accounts-cards.png" alt="邮箱账户卡与连接失败">
+      <figcaption><b>④ 账户卡：谁在收、谁断了</b>每张卡直接显示 IMAP/SMTP 服务器、今日收件、上次检查；连接失败时标红并写明原因（如「IMAP 登录被拒绝（535）」），按钮变成「检查设置」。</figcaption>
+    </figure>
+    <figure class="detail full">
+      <img src="exports/details/records-delivery.png" alt="记录页多路径结果">
+      <figcaption><b>⑤ 每个路径结果独立可见</b>D✔ E✔ F✖ —— 失败的那个标红并给原因，按钮是「重试 F」而不是"重试全部"，已写入的文件夹绝不重复写第二份。</figcaption>
+    </figure>
+  </div>
+</div></section>
+
+<!-- ================= 状态 ================= -->
+<section id="states"><div class="wrap">
+  <div class="sechead"><span class="secno">04</span><h2>必须画对的四种状态</h2></div>
+  <p class="secdesc">这类常驻软件的体验差距，几乎全在「不正常的时候」：正常时谁都会做，异常时要让人一眼看懂、并且敢走开。</p>
+  <div class="states">
+    <div class="state"><span class="dot" style="background:var(--green-600)"></span><b>监听中 / 已暂停</b><p>绿色呼吸点表示在收件；暂停后所有配色转为中性，顶栏常驻一条「已暂停，暂停期间到达的邮件会在恢复后补下载」。</p></div>
+    <div class="state"><span class="dot" style="background:var(--amber-600)"></span><b>邮箱连接失败</b><p>密码被改 / 企业禁用 IMAP / 网络抖动都会断线。概览顶部橙色横幅 + 账户卡标红，点进去改参数、点「测试连接」，不会静默停摆。</p></div>
+    <div class="state"><span class="dot" style="background:var(--red-600)"></span><b>某目标路径不可用</b><p>拔了备份盘 / 网络盘掉线 / 空间不足：路径条单独标红并显示原因，其它路径继续写，绝不因为一个盘坏了就整体停摆。</p></div>
+    <div class="state"><span class="dot" style="background:var(--ink-400)"></span><b>部分成功 / 空状态</b><p>记录里「✔ 生产盘 / ✖ 备份盘」分开显示，可只重试失败项；规则为空时给一条引导，而不是一片空白。</p></div>
+  </div>
+
+  <div class="enumwrap">
+    <h3>状态枚举 · 设计 / 开发对齐</h3>
+    <p>以下枚举与 <code style="font-family:var(--mono);font-size:12px">docs/ARCHITECTURE.md §11.1</code> 完全一致，开发按此写 <code style="font-family:var(--mono);font-size:12px">src/shared/enums.ts</code>，映射到 <code style="font-family:var(--mono);font-size:12px">design/tokens.css</code> 的语义色。</p>
+    <table class="enum">
+      <thead><tr><th style="width:150px">枚举</th><th>取值 · 文案 · 颜色</th></tr></thead>
+      <tbody>
+        <tr><td>账户状态</td><td><span class="g">enabled 正常收件</span> · <span class="n">testing 待测试</span> · <span class="r">auth_failed 密码或参数错误</span> · <span class="a">offline 网络离线</span> · <span class="n">disabled 已停用</span></td></tr>
+        <tr><td>邮件聚合状态</td><td><span class="n">ignored_no_keyword 未命中关键词</span> · <span class="n">ignored_type 附件类型不符</span> · <span class="g">queued 处理中</span> · <span class="a">partial 部分成功·待重试</span> · <span class="g">done 已完成</span> · <span class="r">failed 失败</span></td></tr>
+        <tr><td>投递状态（每路径）</td><td><span class="g">done ✔ 已写入</span> · <span class="a">retry_wait ⚠ 等待重试</span> · <span class="r">failed ✖ 重试失败</span> · <span class="n">pending/copying ⏳ 排队/复制中</span> · <span class="n">skipped – 已跳过</span></td></tr>
+        <tr><td>回信状态</td><td><span class="n">disabled 已关闭</span> · <span class="n">pending 等待中</span> · <span class="n">suppressed 已抑制（同线程）</span> · <span class="g">sent 已回信</span> · <span class="r">failed 回信失败</span></td></tr>
+        <tr><td>路径可用性</td><td><span class="g">ok 正常（显示剩余 xx GB）</span> · <span class="a">low_space 低空间（&lt;2GB）</span> · <span class="r">unavailable 不可用（盘不存在/无权限）</span> · <span class="n">unknown 未检测</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div></section>
+<section id="questions"><div class="wrap">
+  <div class="sechead"><span class="secno">05</span><h2>需要客户拍板的几点</h2></div>
+  <p class="secdesc">设计已按「最可能的口径」落地，下面这些点确认后只需微调，不影响整体结构。完整清单见 <code style="font-family:var(--mono);font-size:13px">docs/REQUIREMENTS.md §9</code>。</p>
+  <ul class="qs">
+    <li><span><b>关键词怎么算命中？</b>标题「包含」即算，还是必须完全一致？现在默认：去掉空格、忽略 RE:/FWD: 前缀后精确匹配，另提供包含模式开关。</span></li>
+    <li><span><b>没命中关键词的邮件要不要留痕？</b>建议在记录里留一条「已忽略」，方便排查「客户说发了、但没存」。</span></li>
+    <li><span><b>要不要一个兜底文件夹？</b>没命中任何关键词、但带 ZIP/TIF 的邮件，也存进一个「未分类」目录，防漏件。现在默认关闭。</span></li>
+    <li><span><b>多路径是复制还是快捷方式？</b>设计按「复制实体文件」做（备份更可靠），会占用多份硬盘空间。</span></li>
+    <li><span><b>一封邮件同时命中两个关键词怎么办？</b>建议全部执行（两个文件夹都存），也可改成只执行优先级最高的一条。</span></li>
+    <li><span><b>未来大概多少个关键词？</b>10 / 50 / 200+，决定规则页是列表式还是加搜索优先。</span></li>
+    <li><span><b>回信语言？</b>英文 / 中英双语；除「已收到」是否要承诺处理时效。</span></li>
+    <li><span><b>附件类型还要哪些？</b>ZIP/TIF 之外是否收 JPG、PNG、PDF、PSD、AI。</span></li>
+    <li><span><b>部署机器信息：</b>系统版本、盘符规划（如 D: 生产 / E: 备份）、剩余空间、是否允许 7×24 不休眠。</span></li>
+  </ul>
+</div></section>
+
+<!-- ================= 交付物 ================= -->
+<section id="files"><div class="wrap">
+  <div class="sechead"><span class="secno">06</span><h2>这轮交付了什么</h2></div>
+  <table>
+    <thead><tr><th style="width:130px">类型</th><th>文件</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>看图</td><td><code>design/exports/*.png</code></td><td>6 张 1440×900 @2x 设计图</td></tr>
+      <tr><td>客户版 PDF</td><td><a href="exports/MailHarbor-设计说明书.pdf"><code>exports/MailHarbor-设计说明书.pdf</code></a></td><td>封面 + 每屏一页，可直接发给客户</td></tr>
+      <tr><td>可编辑源</td><td><code>design/mockups/screens/*.html</code></td><td>纯 HTML/CSS 稿，改文案不动结构</td></tr>
+      <tr><td>设计令牌</td><td><code>design/tokens.css</code></td><td>颜色/字号/间距/圆角/阴影，唯一来源</td></tr>
+      <tr><td>设计说明</td><td><code>design/mockups/README.md</code></td><td>交互细节、边界状态、实现约定</td></tr>
+      <tr><td>需求</td><td><code>docs/REQUIREMENTS.md</code></td><td>v0.2 需求规格（含关键词规则与多路径）</td></tr>
+      <tr><td>产品</td><td><code>docs/PRODUCT.md</code></td><td>用户故事、信息架构、设计决策</td></tr>
+      <tr><td>技术</td><td><code>docs/ARCHITECTURE.md</code></td><td>技术选型、IMAP/SMTP 接入、数据模型、里程碑</td></tr>
+    </tbody>
+  </table>
+</div></section>
+
+<footer><div class="wrap">
+  <div>MailHarbor 设计说明书 · v0.2 · 2026-11-22</div>
+  <div>确认设计后进入「可点击原型 → Windows 开发打包」阶段</div>
+</div></footer>
+
+</body>
+</html>
