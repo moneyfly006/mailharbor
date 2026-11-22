@@ -172,7 +172,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1280,
     minHeight: 780,
     show: false,
-    title: 'MailHarbor',
+    title: '邮箱资料助手',
     backgroundColor: '#FAF7F0',
     autoHideMenuBar: true,
     webPreferences: {
@@ -219,7 +219,7 @@ function createTray(): void {
   const iconPath = resolveTrayIcon()
   const img = iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty()
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img)
-  tray.setToolTip('MailHarbor · 邮件收货助手')
+  tray.setToolTip('邮箱资料助手')
   tray.on('double-click', () => showWindow())
   tray.on('click', () => showWindow())
   refreshTray()
@@ -253,7 +253,7 @@ function refreshTray(): void {
     },
     { type: 'separator' },
     {
-      label: '退出 MailHarbor',
+      label: '退出邮箱资料助手',
       click: () => {
         quitting = true
         app.quit()

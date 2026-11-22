@@ -8,14 +8,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$out = Join-Path $env:USERPROFILE "Desktop\MailHarbor-测试结果.txt"
+$out = Join-Path $env:USERPROFILE "Desktop\邮箱资料助手-测试结果.txt"
 function Log($msg) {
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
   Write-Host $line
   Add-Content -Path $out -Value $line -Encoding UTF8
 }
 
-Log "===== MailHarbor 装机自检 ====="
+Log "===== 邮箱资料助手 装机自检 ====="
 Log ("系统: {0} / {1}" -f (Get-CimInstance Win32_OperatingSystem).Caption, $env:PROCESSOR_ARCHITECTURE)
 
 # 1) 找安装包
@@ -43,9 +43,14 @@ if (-not $NoInstall) {
 }
 
 # 2) 找主程序
-$exe = Join-Path $env:LOCALAPPDATA "Programs\MailHarbor\MailHarbor.exe"
-if (-not (Test-Path $exe)) {
-  Log "未找到 $exe，安装可能失败"
+$names = @("邮箱资料助手", "MailHarbor")
+$exe = $null
+foreach ($n in $names) {
+  $candidate = Join-Path $env:LOCALAPPDATA "Programs\$n\$n.exe"
+  if (Test-Path $candidate) { $exe = $candidate; break }
+}
+if (-not $exe) {
+  Log "未找到主程序（已找：$($names -join ', ')），安装可能失败"
   exit 1
 }
 Log ("主程序: {0} (v{1})" -f $exe, (Get-Item $exe).VersionInfo.FileVersion)
@@ -74,19 +79,19 @@ if (Test-Path $report) {
 }
 
 # 4) 启动界面
-$running = Get-Process -Name "MailHarbor" -ErrorAction SilentlyContinue
+$running = Get-Process -Name "邮箱资料助手","MailHarbor" -ErrorAction SilentlyContinue
 if ($StartApp -and -not $running) {
-  Log "启动 MailHarbor 界面…"
+  Log "启动 邮箱资料助手 界面…"
   Start-Process -FilePath $exe | Out-Null
   Start-Sleep -Seconds 6
 }
-$running = Get-Process -Name "MailHarbor" -ErrorAction SilentlyContinue
+$running = Get-Process -Name "邮箱资料助手","MailHarbor" -ErrorAction SilentlyContinue
 if ($running) {
   Log "进程状态: 运行中（PID $($running[0].Id)）"
 } else {
   Log "进程状态: 未运行（若是自检后正常退出，属正常）"
 }
 
-Log "===== 完成，结果已保存到桌面 MailHarbor-测试结果.txt ====="
+Log "===== 完成，结果已保存到桌面 邮箱资料助手-测试结果.txt ====="
 Write-Host ""
-Write-Host "下一步：打开 MailHarbor → 邮箱账户 → 填 Gmail 应用专用密码 / QQ 授权码 → 测试连接 → 保存并启用" -ForegroundColor Cyan
+Write-Host "下一步：打开 邮箱资料助手 → 邮箱账户 → 填 Gmail 应用专用密码 / QQ 授权码 → 测试连接 → 保存并启用" -ForegroundColor Cyan

@@ -75,8 +75,8 @@ export function Sidebar(): JSX.Element {
           <BrandMark size={26} />
         </span>
         <div>
-          <div className="brand-name">MailHarbor</div>
-          <div className="brand-sub">邮件附件自动归档</div>
+          <div className="brand-name">邮箱资料助手</div>
+          <div className="brand-sub">客户邮件自动归档</div>
         </div>
       </div>
 

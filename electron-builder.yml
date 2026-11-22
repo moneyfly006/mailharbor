@@ -1,5 +1,5 @@
 appId: com.mailharbor.app
-productName: MailHarbor
+productName: 邮箱资料助手
 copyright: Copyright © 2026 MailHarbor
 
 directories:
@@ -32,15 +32,20 @@ win:
   artifactName: MailHarbor-Setup-${version}.${ext}
 
 nsis:
+  include: resources/installer.nsh
   oneClick: false
   perMachine: false
   allowElevation: true
   allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
+  createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: MailHarbor
+  shortcutName: 邮箱资料助手
   deleteAppDataOnUninstall: false
   runAfterFinish: true
+  # 安装包/卸载器也用自己的图标
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
 
 mac:
   target:

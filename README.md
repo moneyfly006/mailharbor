@@ -1,6 +1,6 @@
-# MailHarbor · 邮件收货助手
+# 邮箱资料助手（MailHarbor）
 
-> 给 POD（按需印刷定制）工厂用的 Windows 桌面软件：
+> 给 POD（按需印刷定制）工厂用的 Windows 桌面软件「**邮箱资料助手**」（代码仓库名 mailharbor）：
 > **IMAP 收信 → 按邮件标题关键词（如「原图+卡套」）判断要不要存 → 把 ZIP/TIF 附件复制到该关键词对应的一个或多个本地文件夹 → SMTP 回信告诉客户"已收到"。**
 
 ```
@@ -107,6 +107,9 @@ mail-harbor/
 ## Windows 虚拟机 / 真机验收（一键脚本）
 
 安装包：<https://github.com/moneyfly006/mailharbor/releases/latest>（`MailHarbor-Setup-*.exe`）
+
+> 安装后：桌面会出现 **「邮箱资料助手」** 快捷方式（朱红信封图标），开始菜单同名入口。
+> 旧版（MailHarbor）请先在「应用和功能」里卸载，避免新旧两个目录并存。
 
 1. 把安装包和 `scripts/windows/` 里的两个文件一起放进 Windows；
 2. 双击 **`一键安装并测试.bat`**（或右键 PowerShell 运行 `install-and-test.ps1`）；
