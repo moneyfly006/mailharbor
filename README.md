@@ -101,6 +101,36 @@ mail-harbor/
 
 **验证结果**：`tsc --noEmit`（主进程 + 渲染层）通过 · `electron-vite build` 通过 · 核心 29 断言 + 后端 381 断言 + SQLite 适配层 11 断言 + 打包运行时 E2E 16 断言全过（mock IMAP/SMTP：双路径落盘、SMTP 回信、幂等复跑、部分路径失败只重试失败项、IDLE 自动收信、新增规则后自动补扫历史邮件）。
 
+
+## 网络代理（国内访问 Gmail 必须）
+
+软件支持四种代理模式，在「邮箱账户 → 网络代理」里设置：
+
+| 模式 | 说明 |
+| --- | --- |
+| **跟随系统**（默认） | 自动读取 macOS 系统代理 / Windows Internet 选项 / `ALL_PROXY` 环境变量 |
+| **不使用** | 直连（国外服务器、企业内网常用） |
+| SOCKS5 | 手填地址端口，如 `127.0.0.1:7890`（Clash / V2Ray 常用） |
+| HTTP | 手填 HTTP 代理地址端口，走 `CONNECT` 隧道 |
+
+> IMAP(993)/SMTP(465) 是裸 TCP，不能像 HTTP 那样直接吃系统代理，所以软件内部用
+> 「本地端口转发桥」把 SOCKS5/HTTP CONNECT 包装成本机端口，再让 imapflow/nodemailer 连本机端口，
+> TLS 的 SNI 仍使用真实域名（`imap.gmail.com`），证书照常校验。
+> 点「测试代理」可直接验证代理能否连通 `imap.gmail.com:993`。
+
+**国内不挂代理时**，Gmail 的 IMAP 993 通常表现为「连接超时」——先开代理软件，再点「测试连接」。
+
+## 自动更新与发布（GitHub Actions）
+
+- 仓库：<https://github.com/moneyfly006/mailharbor>
+- 代码合并到 `main` 后：
+  1. `auto-version.yml` 自动把 `package.json` 的 patch 版本 +1、提交并打 `vX.Y.Z` tag；
+  2. `release.yml` 在 **Windows x64 + macOS(Apple Silicon)** 上并行构建，
+     用 electron-builder 发布到 GitHub Releases（含 `latest.yml` 更新元数据）；
+  3. 已安装的客户端启动 30 秒后自动检查更新，后台下载，提示「重启更新」。
+- 手动构建：`pnpm build:win` / `pnpm build:mac`；本地不签名，正式分发建议配 `CSC_LINK` 证书。
+- 界面左下角显示当前版本，点「检查更新」可手动检查。
+
 ## Windows 安装包
 
 **产物**：`release/MailHarbor-Setup-0.1.0.exe`（NSIS，x64，按用户安装、免管理员，117 MB）

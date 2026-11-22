@@ -133,7 +133,18 @@ a {
   box-shadow: none;
 }
 
-/* 输入类控件：聚焦只改边框颜色（内部 input 无边框，避免框里套框） */
+/* 输入类控件：聚焦只由外层容器显色（内部 input 不再画 outline，避免"框里套框"） */
+.input-el:focus-visible,
+.f-search-el:focus-visible,
+.search input:focus-visible,
+.search .input-el:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.tgt-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .input:focus-within,
 .f-search:focus-within,
 .search:focus-within,

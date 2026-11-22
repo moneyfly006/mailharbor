@@ -33,7 +33,7 @@
 
 .f-search:focus-within {
   border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
+  box-shadow: none;
 }
 
 .f-search .ico {

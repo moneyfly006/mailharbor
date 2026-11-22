@@ -770,7 +770,7 @@ h1.page-title {
 
 .input:focus-within {
   border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
+  box-shadow: none;
 }
 
 .input.is-error {
@@ -883,7 +883,7 @@ textarea.input-el {
 
 textarea.input:focus-within {
   border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
+  box-shadow: none;
 }
 
 .select {
