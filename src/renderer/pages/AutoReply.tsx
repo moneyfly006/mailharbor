@@ -16,7 +16,7 @@ import { replyLanguageLabel } from '../lib/status'
 import { useApp } from '../state/app-state'
 import '../styles/screens/autoreply.css'
 
-const VAR_TOKENS = ['{关键词}', '{文件名}', '{数量}', '{时间}'] as const
+const VAR_TOKENS = ['{关键词}', '{文件名}', '{数量}', '{时间}', '{工厂名}'] as const
 
 const DEFAULT_TEMPLATES = {
   replySubjectZh: '图稿已收到 — {关键词} / {文件名}',
@@ -202,7 +202,8 @@ export function AutoReply(): JSX.Element {
       '{关键词}': sample?.matchedKeyword ?? FALLBACK_SAMPLE.keyword,
       '{文件名}': first?.filename ?? FALLBACK_SAMPLE.filename,
       '{数量}': String(attachments.length || 1),
-      '{时间}': fmtDateTime(sample?.receivedAt ?? FALLBACK_SAMPLE.receivedAt)
+      '{时间}': fmtDateTime(sample?.receivedAt ?? FALLBACK_SAMPLE.receivedAt),
+      '{工厂名}': (draft?.factoryName || '海印 POD · 印前组').trim()
     }
   }, [sample])
 
@@ -313,8 +314,12 @@ export function AutoReply(): JSX.Element {
                   <span className="v">{draft.replyDelaySec} 秒</span>
                 </div>
                 <div>
+                  <span className="k">每小时上限</span>
+                  <span className="v">{draft.replyHourlyCap} 封</span>
+                </div>
+                <div>
                   <span className="k">模板状态</span>
-                  <span className={cls('v', dirty ? 'warn' : 'ok')}>{dirty ? '有未保存改动' : '已保存'}</span>
+                  <span className={cls('v', dirty ? 'warn' : 'ok')}>{dirty ? '未保存' : '已保存'}</span>
                 </div>
               </div>
             </div>
@@ -417,7 +422,7 @@ export function AutoReply(): JSX.Element {
 
             <div className="tpl-ft">
               <StatusBadge tone="ok" icon="check">
-                4 个变量全部可用
+                5 个变量全部可用
               </StatusBadge>
               <span className="tpl-note">模板区分中英文，切换语言不会丢失已编辑内容</span>
               <span style={{ marginLeft: 'auto' }}>
@@ -435,7 +440,7 @@ export function AutoReply(): JSX.Element {
               <div className="send-item">
                 <div>
                   <div className="lbl">回复延迟</div>
-                  <div className="sub">等附件写入完成再发，避免空回复</div>
+                  <div className="sub">等附件写入完成再发</div>
                 </div>
                 <div className="delay-input">
                   <TextField
@@ -453,18 +458,48 @@ export function AutoReply(): JSX.Element {
                 </div>
               </div>
               <div className="send-item">
-                <Switch checked disabled ariaLabel="同一线程只回一次（固定开启）" />
                 <div>
-                  <div className="lbl">同一线程只回一次</div>
-                  <div className="sub">固定策略：按 thread_key 去重，防回信轰炸</div>
+                  <div className="lbl">每小时上限</div>
+                  <div className="sub">防账号被风控</div>
+                </div>
+                <div className="delay-input">
+                  <TextField
+                    value={String(draft.replyHourlyCap)}
+                    onChange={(value) => {
+                      const n = Number(value.replace(/[^\d]/g, ''))
+                      markDraft({ replyHourlyCap: Number.isFinite(n) ? Math.min(500, Math.max(1, n)) : 1 })
+                    }}
+                    inputMode="numeric"
+                    mono
+                    ariaLabel="每小时回信上限"
+                    className="delay-field"
+                  />
+                  <span>封/时</span>
                 </div>
               </div>
               <div className="send-item">
-                <Switch checked disabled ariaLabel="全部必达路径成功才回信（固定开启）" />
+                <Switch
+                  checked={draft.replyThreadOnce}
+                  onChange={(checked) => markDraft({ replyThreadOnce: checked })}
+                  ariaLabel="同一线程只回一次"
+                />
                 <div>
-                  <div className="lbl">全部必达路径成功才回信</div>
-                  <div className="sub">部分失败时等待重试完成</div>
+                  <div className="lbl">同一线程只回一次</div>
+                  <div className="sub">防回信轰炸（按 thread_key 去重）</div>
                 </div>
+              </div>
+              <div className="send-item send-item--wide">
+                <div>
+                  <div className="lbl">回信署名（工厂名）</div>
+                  <div className="sub">模板里的 {'{工厂名}'} 用它替换</div>
+                </div>
+                <TextField
+                  value={draft.factoryName ?? ''}
+                  onChange={(value) => markDraft({ factoryName: value })}
+                  placeholder="海印 POD · 印前组"
+                  ariaLabel="回信署名（工厂名）"
+                  className="factory-field"
+                />
               </div>
             </div>
             <div className="test-row">

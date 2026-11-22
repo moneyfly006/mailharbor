@@ -130,7 +130,7 @@ export class ReplyService {
   private settings(): Settings {
     const keys = [
       'replyEnabled', 'replyDelaySec', 'replySubjectZh', 'replyBodyZh', 'replySubjectEn', 'replyBodyEn',
-      'replyLanguage', 'replyThreadOnce', 'replyHourlyCap', 'logLevel'
+      'replyLanguage', 'replyThreadOnce', 'replyHourlyCap', 'factoryName', 'logLevel'
     ] as const
     const out: Record<string, unknown> = {}
     for (const k of keys) out[k] = this.deps.getSetting(k)
@@ -305,7 +305,11 @@ export class ReplyService {
       filenames,
       keyword: msg.matched_keyword,
       sentAt: this.now(),
-      factoryName: account.smtpFromName || account.displayName || account.email
+      factoryName:
+        String(settings.factoryName || '').trim() ||
+        account.smtpFromName ||
+        account.displayName ||
+        account.email
     })
     const rendered = composeReply(
       {

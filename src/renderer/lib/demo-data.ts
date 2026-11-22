@@ -687,6 +687,7 @@ export const DEMO_SETTINGS: Settings = {
   replyDelaySec: 10,
   replyThreadOnce: true,
   replyHourlyCap: 60,
+  factoryName: '海印 POD · 印前组',
   replySubjectZh: '图稿已收到 — {关键词} / {文件名}',
   replyBodyZh: [
     '您好，',

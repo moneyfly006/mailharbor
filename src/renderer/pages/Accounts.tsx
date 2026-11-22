@@ -410,11 +410,11 @@ export function Accounts(): JSX.Element {
     setErrors({})
   }
 
-  const handleEmail = (email: string): void => {
+  // 设计稿中「账号（邮箱地址）」就是邮箱地址本身，二者保持同步（真实后端 AccountInput 需要 email）
+  const handleImapUser = (value: string): void => {
     setForm((prev) => {
-      const next: FormState = { ...prev, email }
-      if (!prev.imapUser || prev.imapUser === prev.email) next.imapUser = email
-      if (prev.smtpSameAsImap && (!prev.smtpUser || prev.smtpUser === prev.email)) next.smtpUser = email
+      const next: FormState = { ...prev, email: value, imapUser: value }
+      if (prev.smtpSameAsImap) next.smtpUser = value
       return next
     })
     setTest(null)
@@ -847,7 +847,7 @@ export function Accounts(): JSX.Element {
                 <Field label="账号（邮箱地址）" error={errors.imapUser} className="grow">
                   <TextField
                     value={form.imapUser}
-                    onChange={(v) => update({ imapUser: v })}
+                    onChange={handleImapUser}
                     error={Boolean(errors.imapUser)}
                     placeholder="you@example.com"
                     autoFocus={autoFocusField === 'email'}

@@ -75,6 +75,7 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   replyThreadOnce: true,
   replyHourlyCap: 60,
   replyLanguage: 'en',
+  factoryName: '海印 POD · 印前组',
   replySubjectZh: '图稿已收到 · {关键词}',
   replyBodyZh: '您好，\n\n已收到您的图稿（{数量} 个文件）：\n{文件名}\n\n我们会尽快安排处理，如需补充请直接回复本邮件。\n\n{工厂名}',
   replySubjectEn: 'Artwork received — {关键词}',

@@ -663,3 +663,26 @@
     display: none;
   }
 }
+/* 需要加样式 */
+
+/* 发送设置：左侧标签区自适应，右侧控件固定宽 */
+.send-item > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+/* 回信署名独占一行（跨满 send-grid 三列） */
+.send-grid > .send-item--wide {
+  grid-column: 1 / -1;
+}
+.send-item .factory-field {
+  margin-left: auto;
+  width: 220px;
+  flex: none;
+}
+.send-item .factory-field input {
+  height: 28px;
+  font-size: 11.5px;
+}
+@media (max-width: 1400px) {
+  .send-item .factory-field { width: 180px; }
+}

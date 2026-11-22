@@ -234,6 +234,8 @@ export interface Settings {
   replyThreadOnce: boolean
   /** 每小时回信上限（默认 60，防账号被风控） */
   replyHourlyCap: number
+  /** 回信署名 / 工厂名，模板变量 {工厂名} */
+  factoryName: string
   replySubjectZh: string
   replyBodyZh: string
   replySubjectEn: string
