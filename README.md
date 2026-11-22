@@ -123,12 +123,17 @@ mail-harbor/
 ## 自动更新与发布（GitHub Actions）
 
 - 仓库：<https://github.com/moneyfly006/mailharbor>
+- 最新发布：<https://github.com/moneyfly006/mailharbor/releases/latest>
+  （Windows 安装包、macOS arm64/x64 的 dmg+zip、以及自动更新用的 `latest.yml` / `latest-mac.yml`）
 - 代码合并到 `main` 后：
   1. `auto-version.yml` 自动把 `package.json` 的 patch 版本 +1、提交并打 `vX.Y.Z` tag；
   2. `release.yml` 在 **Windows x64 + macOS(Apple Silicon)** 上并行构建，
      用 electron-builder 发布到 GitHub Releases（含 `latest.yml` 更新元数据）；
   3. 已安装的客户端启动 30 秒后自动检查更新，后台下载，提示「重启更新」。
 - 手动构建：`pnpm build:win` / `pnpm build:mac`；本地不签名，正式分发建议配 `CSC_LINK` 证书。
+- **macOS 自动更新的前提**：macOS 的自动升级由 Squirrel.Mac 完成，要求应用有代码签名；
+  未签名时 dmg 可以安装使用，但「自动更新」在 mac 上不会生效（Windows 不受影响）。
+  如需 mac 自动更新，在仓库 Secrets 配 `CSC_LINK` / `CSC_KEY_PASSWORD`（或 Apple Developer ID）即可。
 - 界面左下角显示当前版本，点「检查更新」可手动检查。
 
 ## Windows 安装包
