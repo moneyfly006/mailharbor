@@ -19,4 +19,5 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test:core
+      - run: pnpm test:seed
       - run: pnpm test:sqlite

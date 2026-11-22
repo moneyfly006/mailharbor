@@ -6,6 +6,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, shell, powerMonitor } from
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { openDb, closeDb } from './db'
+import { seedDefaultRulesIfEmpty } from './seed'
 import { registerIpc, disposeIpc, buildDashboard } from './ipc'
 import { createBackend } from './backend'
 import { createUpdater, getUpdateState } from './updater'
@@ -47,6 +48,9 @@ async function bootstrap(): Promise<void> {
   })
   try {
     await backend.init()
+    // 首次运行预置「标题关键词规则」（不预置任何邮箱账号/密码）
+    const seeded = seedDefaultRulesIfEmpty()
+    if (seeded > 0) console.log(`[main] 已预置 ${seeded} 条默认标题规则`)
   } catch (e) {
     console.error('[main] backend init failed:', e)
   }

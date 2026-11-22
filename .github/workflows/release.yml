@@ -116,6 +116,7 @@ jobs:
         run: |
           pnpm typecheck
           pnpm test:core
+          pnpm test:seed
           if [ "$RUNNER_OS" != "Windows" ]; then pnpm test:sqlite; fi
 
       - name: 构建主进程/渲染层

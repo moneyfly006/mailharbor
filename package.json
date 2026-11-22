@@ -16,11 +16,12 @@
     "dist:win": "electron-vite build && electron-builder --win nsis",
     "postinstall": "electron-builder install-app-deps",
     "test:backend": "node scripts/run-backend-tests.mjs",
-    "test": "pnpm test:core && pnpm test:backend && pnpm test:sqlite",
+    "test": "pnpm test:core && pnpm test:seed && pnpm test:backend && pnpm test:sqlite",
     "build:win": "electron-vite build && electron-builder --win nsis --x64",
     "build:win:dir": "electron-vite build && electron-builder --win --x64 --dir",
     "test:sqlite": "MH_FORCE_NODE_SQLITE=1 node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-sqlite-adapter.ts",
-    "test:packaged": "node scripts/packaged-e2e.mjs"
+    "test:packaged": "node scripts/packaged-e2e.mjs",
+    "test:seed": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-seed.ts"
   },
   "dependencies": {
     "electron-updater": "^6.8.11",
