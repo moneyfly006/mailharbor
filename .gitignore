@@ -8,3 +8,5 @@ design/exports/*.png
 .DS_Store
 data/
 logs/
+out/
+*.tsbuildinfo

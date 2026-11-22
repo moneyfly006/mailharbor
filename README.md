@@ -1,7 +1,7 @@
 # MailHarbor · 邮件收货助手
 
 > 给 POD（按需印刷定制）工厂用的 Windows 桌面软件：
-> **自动盯 Gmail → 按邮件标题关键词（如「原图+卡套」）判断要不要存 → 把 ZIP/TIF 附件复制到该关键词对应的一个或多个本地文件夹 → 自动回信告诉客户"已收到"。**
+> **IMAP 收信 → 按邮件标题关键词（如「原图+卡套」）判断要不要存 → 把 ZIP/TIF 附件复制到该关键词对应的一个或多个本地文件夹 → SMTP 回信告诉客户"已收到"。**
 
 ```
 客户发邮件（标题「原图+卡套」，附件 POD_ORDER_20486.zip）
@@ -9,7 +9,7 @@
         ▼
   ┌──────────────────────────────┐
   │  MailHarbor（托盘常驻 / 开机自启）│
-  │  1. 轮询 Gmail 新邮件          │
+  │  1. IMAP 收新邮件（IDLE+轮询）  │
   │  2. 标题命中关键词规则          │
   │  3. 附件扇出复制 → N 个路径     │
   │  4. 全部必达路径成功 → 回信     │
@@ -27,10 +27,12 @@ E:\POD\备份\卡套\POD_ORDER_20486.zip  ✔
 | --- | --- | --- |
 | 0. 需求分析（含关键词规则 v0.2） | ✅ 完成 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) |
 | 0. 产品说明 / 信息架构 | ✅ 完成 | [docs/PRODUCT.md](docs/PRODUCT.md) |
-| 1. **设计图（本阶段交付）** | 🚧 收尾中 | [design/mockups](design/mockups) · [设计说明书](design/index.html) |
+| 1. **设计图** | ✅ 完成 | [design/mockups](design/mockups) · [设计说明书](design/index.html) · 客户版 PDF |
 | 2. 技术架构与 IMAP/SMTP 接入方案 | ✅ 完成 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 3. 可点击原型（HTML demo） | ⏳ 待客户确认设计后 | `design/prototype/` |
-| 4. 应用开发（Electron + Windows 打包） | ⏳ 待开始 | `src/` |
+| 4. 应用开发（Electron + Windows 打包） | ✅ **MVP 已完成** | `src/`（19.8k 行，双端 typecheck + build 通过） |
+| 5. 本地联调（模拟 IMAP/SMTP 服务器） | ✅ 完成 | `scripts/mock-mail-server.mjs`，e2e 69 断言全过 |
+| 6. Windows 安装包 | ⏳ 待 Windows 机器/CI 执行 | `pnpm dist:win` |
 
 **工期估算**：34–36 人天（含 15% 缓冲 39–41 人天）；2 人并行约 5 周，1 人约 8–9 周。其中「IMAP 收信 + 中文文件名解析 + 规则引擎 + 多路径扇出 + 部分失败恢复」单列 14–16 人天，是最大复杂点。
 
@@ -81,6 +83,49 @@ mail-harbor/
 4. **自动回信**：全部必达路径成功后经 SMTP 回信，模板中/英文可编辑，防重复回信。
 5. **可换邮箱**：服务商预设 + IMAP/SMTP 参数表单 + 测试连接，多账户启停，密码失效提醒。
 6. **7×24 常驻**：开机自启、托盘、断网恢复补下载、失败重试、不静默丢件。
+
+## 已完成的功能（MVP）
+
+| 模块 | 状态 |
+| --- | --- |
+| 关键词规则引擎（精确/包含、RE:/FWD: 剥离、全半角归一、中文业务后缀、多规则全执行） | ✅ 29 单测 |
+| 一条关键词 → N 个目标路径扇出；重名自动加 `(2)`；临时文件 + 原子改名 | ✅ |
+| IMAP 收信（UID 增量、UIDVALIDITY 保护、BODYSTRUCTURE≤5 层、流式下载 + SHA256、IDLE + 降级轮询） | ✅ |
+| SMTP 回信（模板变量、In-Reply-To/References、同线程只回一次、防轰炸、日上限、熔断） | ✅ |
+| 失败重试（跨路径并行/单路径串行、路径不可用不消耗次数、15s→1h 退避、启动对账） | ✅ |
+| 账户表单 + 5 个服务商预设 + IMAP/SMTP 分别测试连接（11 个错误码 + 中文修复指引） | ✅ |
+| 托盘常驻 / 开机自启 / 单实例 / 关窗隐藏 / 休眠恢复补扫 | ✅ |
+| 5 屏 React UI（概览/触发规则/邮箱账户/自动回复/下载记录） | ✅ 截图见 `design/exports/app/` |
+| 本地模拟邮件服务器（无真实邮箱也能跑通全链路） | ✅ |
+
+**验证结果**：`tsc --noEmit`（主进程 + 渲染层）通过 · `electron-vite build` 通过 · 核心 29 断言 + 后端 376 断言全过（含 mock IMAP/SMTP 端到端：双路径落盘、SMTP 回信、幂等复跑、部分路径失败只重试失败项、IDLE 自动收信）。
+
+## 本地运行
+
+```bash
+# 1) 起模拟邮件服务器（无需真实账号）
+node scripts/mock-mail-server.mjs
+
+# 2) 另开一个终端，启动桌面端
+pnpm dev
+
+# 3) 在「邮箱账户」里添加：
+#    预设：自定义 | IMAP 127.0.0.1:1143 不加密 | SMTP 127.0.0.1:2525 不加密
+#    账号 demo@mailharbor.test / 密码 demo-pass → 测试连接 → 保存并启用
+# 4) 在「触发规则」加一条：关键词「原图+卡套」，目标路径指向任意本地目录
+# 5) 等 30 秒（或点「检查新邮件」），附件会自动落盘，SMTP 模拟收件箱里能收到回信
+
+# 跑测试
+pnpm test:core        # 规则引擎/文件名/复制 29 断言
+pnpm test:backend     # repos/dispatcher/reply/scheduler/e2e 376 断言
+node scripts/smoke-ui.mjs   # UI 冒烟（需 Playwright + Electron 二进制）
+```
+
+## 成本与报价
+
+- 详细估算：[docs/COST.md](docs/COST.md)
+- 一页可视化报价单：[cost/quote.html](cost/quote.html)
+- 重算脚本：`python3 scripts/cost_estimate.py`（改 `cost/costs.json` 即可）
 
 ## 本地预览设计图
 

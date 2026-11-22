@@ -1,0 +1,416 @@
+/* 概览页（对应 design/mockups/screens/01-dashboard.html） */
+.content {
+  gap: 14px;
+}
+
+/* ---- 工单条 */
+.ticket {
+  height: 70px;
+  flex: none;
+}
+
+.ticket-stamp {
+  padding: 0 26px 0 20px;
+}
+
+/* ---- 顶部三卡 */
+.cards-top {
+  flex: none;
+  display: grid;
+  grid-template-columns: 300px 1fr 1.06fr;
+  gap: var(--grid-gap);
+  height: 208px;
+}
+
+/* 监听卡 */
+.listen {
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.listen-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.dot.big {
+  width: 10px;
+  height: 10px;
+  margin-top: 7px;
+}
+
+.dot.big::after {
+  inset: -4px;
+}
+
+.listen-title {
+  font-family: var(--type-display);
+  font-size: 21px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.listen-sub {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.listen-badge {
+  margin-left: auto;
+}
+
+.listen-quiet {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+  letter-spacing: 0.01em;
+}
+
+.listen-stats {
+  display: flex;
+  gap: 0;
+  border-top: 1px dotted var(--color-rule-dotted);
+  padding-top: 9px;
+}
+
+.listen-stats > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-right: 1px dotted var(--color-rule-dotted);
+  padding-right: 8px;
+}
+
+.listen-stats > div + div {
+  padding-left: 10px;
+}
+
+.listen-stats > div:last-child {
+  border-right: 0;
+}
+
+.listen-stats .k {
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+  letter-spacing: 0.03em;
+}
+
+.listen-stats .v {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-700);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 邮箱卡 */
+.mail-card .card-bd {
+  padding: 6px 14px 12px;
+}
+
+.mail-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 2px;
+  border-bottom: 1px dotted var(--color-rule-dotted);
+}
+
+.mail-row:last-child {
+  border-bottom: 0;
+}
+
+.mail-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-200);
+  border: 1px solid var(--color-rule);
+  color: var(--ink-600);
+}
+
+.mail-mark.warn {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-strong);
+}
+
+.mail-id {
+  min-width: 0;
+  flex: 1;
+}
+
+.mail-addr {
+  font-size: 12.5px;
+  color: var(--ink-800);
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mail-meta {
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 磁盘卡 */
+.drive-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.drive-row + .drive-row {
+  border-top: 1px dotted var(--color-rule-dotted);
+}
+
+.drive-letter {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--paper-200);
+  border: 1px solid var(--color-rule);
+  color: var(--ink-700);
+}
+
+.drive-letter.bad {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.drive-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.drive-name {
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.drive-name > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drive-name .p {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drive-badge {
+  height: 17px;
+  font-size: 10.5px;
+  padding: 0 5px;
+  flex: none;
+}
+
+.drive-bad-text {
+  font-size: 10.5px;
+  color: var(--color-danger);
+  margin-top: 2px;
+}
+
+.drive-val {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-800);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.drive-val small {
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+}
+
+.drive-foot {
+  border-top: 1px dotted var(--color-rule-dotted);
+  margin-top: 6px;
+  padding-top: 7px;
+  font-size: 10px;
+  color: var(--color-text-quaternary);
+  line-height: 1.5;
+}
+
+/* ---- 底部：最近记录 + 待重试 */
+.cards-bottom {
+  flex: 1;
+  min-height: 340px;
+  display: grid;
+  grid-template-columns: 1fr 336px;
+  gap: var(--grid-gap);
+}
+
+.recent .card-bd {
+  padding: 6px 8px 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.recent .table th {
+  padding: 0 8px 7px;
+}
+
+.recent .table td {
+  padding: 6px 8px;
+}
+
+.recent .cell-title {
+  max-width: 100%;
+}
+
+.recent .card-ft {
+  padding: 6px 14px;
+}
+
+.retry-card .card-bd {
+  padding: 6px 14px 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.retry-item {
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-bg);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.retry-item .ri-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.retry-item .ri-file {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retry-item .ri-path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-danger-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retry-item .ri-reason {
+  font-size: 10.5px;
+  color: var(--color-danger-strong);
+  margin-top: 2px;
+}
+
+.retry-item .ri-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.retry-note {
+  margin-top: auto;
+  border-top: 1px dotted var(--color-rule-dotted);
+  padding: 6px 0 8px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--color-text-quaternary);
+  display: flex;
+  gap: 6px;
+}
+
+/* ---- 窄屏 / 矮屏折叠（README §8：1366×768 时三卡改 2 列） */
+@media (max-width: 1366px) {
+  .cards-top {
+    grid-template-columns: 260px 1fr 1fr;
+    height: 196px;
+  }
+
+  .cards-bottom {
+    grid-template-columns: 1fr 300px;
+    min-height: 320px;
+  }
+
+  .drive-name .p {
+    display: none;
+  }
+
+  .listen-title {
+    font-size: 19px;
+  }
+
+  .recent .table th:nth-child(2) {
+    width: auto;
+  }
+}
+
+@media (max-width: 1280px) {
+  .cards-top {
+    grid-template-columns: 236px 1fr 1fr;
+  }
+
+  .listen-sub br {
+    display: none;
+  }
+
+  .cards-bottom {
+    grid-template-columns: 1fr 284px;
+  }
+}
+
+@media (max-height: 820px) {
+  .ticket {
+    height: 64px;
+  }
+
+  .cards-top {
+    height: 190px;
+  }
+}

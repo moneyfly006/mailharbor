@@ -1,0 +1,101 @@
+/**
+ * 渲染层服务商预设（与 src/main/presets.ts 同一份口径）。
+ * 选择预设 → 自动回填 IMAP / SMTP 主机、端口、加密方式；所有字段仍可手改。
+ */
+import type { Encryption, ProviderPreset } from '@shared/types'
+
+export interface PresetDef {
+  id: ProviderPreset
+  /** 分段控件用的短标签 */
+  label: string
+  fullLabel: string
+  imapHost: string
+  imapPort: number
+  imapSecure: Encryption
+  smtpHost: string
+  smtpPort: number
+  smtpSecure: Encryption
+  /** 密码框标签：Gmail 应用专用密码 / QQ 授权码 … */
+  passwordLabel: string
+  passwordHint: string
+  supported: boolean
+  unsupportedReason?: string
+}
+
+export const PRESETS: PresetDef[] = [
+  {
+    id: 'gmail',
+    label: 'Gmail',
+    fullLabel: 'Gmail',
+    imapHost: 'imap.gmail.com',
+    imapPort: 993,
+    imapSecure: 'ssl',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 465,
+    smtpSecure: 'ssl',
+    passwordLabel: '应用专用密码',
+    passwordHint: 'Gmail 填「应用专用密码」（16 位，需先开启两步验证），不是邮箱登录密码。',
+    supported: true
+  },
+  {
+    id: 'google_workspace',
+    label: 'Workspace',
+    fullLabel: 'Google Workspace',
+    imapHost: 'imap.gmail.com',
+    imapPort: 993,
+    imapSecure: 'ssl',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 465,
+    smtpSecure: 'ssl',
+    passwordLabel: '应用专用密码',
+    passwordHint: 'Workspace 账号同样使用应用专用密码；若管理员禁用了 IMAP，需要联系管理员开启。',
+    supported: true
+  },
+  {
+    id: 'qq',
+    label: 'QQ 邮箱',
+    fullLabel: 'QQ 邮箱',
+    imapHost: 'imap.qq.com',
+    imapPort: 993,
+    imapSecure: 'ssl',
+    smtpHost: 'smtp.qq.com',
+    smtpPort: 465,
+    smtpSecure: 'ssl',
+    passwordLabel: '授权码',
+    passwordHint: 'QQ 邮箱请填「授权码」：设置 → 账户 → 开启 IMAP/SMTP → 短信验证后得到 16 位授权码。',
+    supported: true
+  },
+  {
+    id: 'outlook',
+    label: 'Outlook',
+    fullLabel: 'Outlook / Microsoft 365',
+    imapHost: 'outlook.office365.com',
+    imapPort: 993,
+    imapSecure: 'ssl',
+    smtpHost: 'smtp.office365.com',
+    smtpPort: 587,
+    smtpSecure: 'starttls',
+    passwordLabel: '密码',
+    passwordHint: '微软已停用 IMAP/SMTP 基本认证，此预设通常无法登录；建议改用 Gmail 或 QQ 邮箱。',
+    supported: false,
+    unsupportedReason: '微软已停用应用专用密码方式，当前版本不支持 Outlook 收信；请改用 Gmail / Google Workspace / QQ 邮箱或自定义服务器。'
+  },
+  {
+    id: 'custom',
+    label: '自定义',
+    fullLabel: '自定义（企业邮箱）',
+    imapHost: '',
+    imapPort: 993,
+    imapSecure: 'ssl',
+    smtpHost: '',
+    smtpPort: 465,
+    smtpSecure: 'ssl',
+    passwordLabel: '密码 / 授权码',
+    passwordHint: '填写企业邮箱提供的 IMAP / SMTP 服务器地址，以及与邮箱配套的密码或授权码。',
+    supported: true
+  }
+]
+
+export function presetById(id: ProviderPreset): PresetDef {
+  return PRESETS.find((p) => p.id === id) ?? PRESETS[PRESETS.length - 1]
+}

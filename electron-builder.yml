@@ -1,0 +1,22 @@
+appId: com.mailharbor.app
+productName: MailHarbor
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**
+  - resources/**
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: MailHarbor-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MailHarbor

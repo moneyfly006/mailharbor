@@ -1,0 +1,380 @@
+/* ============================================================================
+   MailHarbor · 通用组件（Modal / Toast / Tooltip / Skeleton / Spin / Error）
+   ============================================================================ */
+
+/* ---------- loading ---------- */
+.spin {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1.6px solid rgba(44, 85, 103, 0.25);
+  border-top-color: var(--color-info);
+  border-radius: 999px;
+  animation: spin 900ms linear infinite;
+  flex: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.skeleton {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--paper-200) 0%, var(--paper-300) 40%, var(--paper-200) 80%);
+  background-size: 220% 100%;
+  animation: shimmer 1200ms var(--ease-in-out) infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.skeleton-line {
+  height: 12px;
+}
+
+.skeleton-card {
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* ---------- 错误态 ---------- */
+.error-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-bg);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  color: var(--color-danger-strong);
+}
+
+.error-state .e-ico {
+  flex: none;
+  margin-top: 1px;
+}
+
+.error-state .e-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.error-state .e-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 3px;
+  color: var(--vermilion-700);
+}
+
+.error-state .e-actions {
+  margin-left: auto;
+  flex: none;
+}
+
+/* ---------- Tooltip ---------- */
+.tip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.tip-bubble {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translate(-50%, 2px);
+  max-width: 340px;
+  width: max-content;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-900);
+  color: var(--color-text-on-inverse);
+  font-family: var(--type-body);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  white-space: pre-line;
+  text-align: left;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+  z-index: var(--z-dropdown);
+}
+
+.tip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--ink-900);
+}
+
+.tip-wrap:hover > .tip-bubble,
+.tip-wrap:focus-within > .tip-bubble {
+  opacity: 1;
+}
+
+/* ---------- Toast ---------- */
+.toast-viewport {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 360px;
+}
+
+.toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: var(--paper-000);
+  border: 1px solid var(--color-rule-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px 12px 10px 11px;
+  overflow: hidden;
+  pointer-events: auto;
+  animation: toast-in var(--dur-base) var(--ease-out);
+}
+
+.toast::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--color-success);
+}
+
+.toast.is-bad::before {
+  background: var(--color-danger);
+}
+
+.toast.is-warn::before {
+  background: var(--color-warning);
+}
+
+.toast .t-ico {
+  color: var(--color-success);
+  margin-top: 1px;
+  flex: none;
+}
+
+.toast.is-bad .t-ico {
+  color: var(--color-danger);
+}
+
+.toast.is-warn .t-ico {
+  color: var(--color-warning);
+}
+
+.toast .t-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.toast .t-title {
+  font-size: 13.5px;
+  font-weight: var(--weight-medium);
+  color: var(--ink-900);
+  line-height: 1.4;
+}
+
+.toast .t-desc {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.toast .t-time {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+  flex: none;
+  padding-top: 2px;
+}
+
+.toast .t-x {
+  color: var(--ink-300);
+  flex: none;
+  margin-top: 1px;
+  border: 0;
+  background: transparent;
+  padding: 1px;
+  border-radius: var(--radius-xs);
+}
+
+.toast .t-x:hover {
+  color: var(--ink-700);
+  background: var(--paper-200);
+}
+
+.toast .t-x:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- Modal ---------- */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--color-bg-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: scrim-in var(--dur-base) var(--ease-standard);
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-card {
+  width: 460px;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  background: var(--paper-000);
+  border: 1px solid var(--color-rule-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  overflow: auto;
+  animation: modal-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-hd {
+  padding: 16px 18px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.modal-hd h3 {
+  font-family: var(--type-display);
+  font-size: 19px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+
+.modal-hd .m-sub {
+  font-size: 11px;
+  color: var(--color-text-quaternary);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.modal-bd {
+  padding: 10px 18px 4px;
+  font-size: 13.5px;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+
+.modal-bd b {
+  color: var(--ink-900);
+}
+
+.modal-ft {
+  padding: 14px 18px 16px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-ft .m-left {
+  margin-right: auto;
+}
+
+/* ---------- 分节标题（页面内复用） ---------- */
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: none;
+}
+
+.section-title h2 {
+  font-family: var(--type-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.section-title .cnt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-quaternary);
+}
+
+.section-title .right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

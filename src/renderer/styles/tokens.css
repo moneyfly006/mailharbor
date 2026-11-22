@@ -1,0 +1,294 @@
+/* ============================================================================
+   MailHarbor · Design Tokens  v1.0
+   ----------------------------------------------------------------------------
+   视觉语言：「印刷工坊的纸与墨」Paper & Ink — 未涂布艺术纸的暖米白底，
+   深墨蓝正文，朱红点缀，发丝级分隔线，印刷工单式的等宽数字。
+   本文件是唯一的设计令牌来源（single source of truth）。
+   · 纯 CSS 变量，不含任何选择器规则（只作用于 :root）
+   · 命名分三层：primitive（原始色阶）→ semantic（语义）→ component（组件）
+   开发实现时请只引用 semantic / component 层，不要直接引用 primitive。
+   ============================================================================ */
+
+:root {
+  /* ==========================================================================
+     1. PRIMITIVE · 纸（背景层级）
+     ========================================================================== */
+  --paper-000: #FDFBF6; /* 最高层：弹窗、输入框内底 */
+  --paper-050: #FCFAF4;
+  --paper-100: #FAF7F0; /* 应用主画布 */
+  --paper-200: #F5F1E7; /* 侧边栏、内嵌条带 */
+  --paper-300: #EFEADD; /* hover、表头 */
+  --paper-400: #E5DDCC; /* pressed、禁用填充 */
+  --paper-500: #D8CEBA; /* 轨道、进度槽 */
+
+  /* ==========================================================================
+     2. PRIMITIVE · 墨（前景层级）
+     ========================================================================== */
+  --ink-950: #0E151D;
+  --ink-900: #16202B; /* 正文主墨 */
+  --ink-800: #22303D;
+  --ink-700: #333F4C; /* 次级正文 */
+  --ink-600: #4A5561;
+  --ink-500: #5E6873; /* 三级文字（辅助说明） */
+  --ink-400: #7C858F; /* 占位符、极弱标签 */
+  --ink-300: #A6ADB5; /* 禁用文字 / 装饰性图标 */
+  --ink-inverse: #FBF8F1; /* 深底上的文字 */
+
+  /* ==========================================================================
+     3. PRIMITIVE · 朱红（唯一强调色）
+     ========================================================================== */
+  --vermilion-700: #8F2A19;
+  --vermilion-600: #A83321;
+  --vermilion-500: #C8422D; /* 主强调 · 朱红 */
+  --vermilion-400: #D9604A;
+  --vermilion-200: #EBC7BC;
+  --vermilion-100: #F6E6E0;
+  --vermilion-050: #FAF0EC;
+
+  /* ==========================================================================
+     4. PRIMITIVE · 状态色（低饱和油墨色，非荧光 UI 色）
+     ========================================================================== */
+  --green-700: #1F5540;
+  --green-600: #2C6B4B; /* 成功 / 监听中 */
+  --green-100: #E3EDE4;
+  --green-200: #C4D6C6;
+
+  --amber-700: #7A5314;
+  --amber-600: #96660F; /* 警告 / 待处理 */
+  --amber-100: #F6EDD8;
+  --amber-200: #E2CBA0;
+
+  --red-700: #93281A;
+  --red-600: #B4341F; /* 错误 / 失败 */
+  --red-100: #F7E4DE;
+  --red-200: #E3B8AC;
+
+  --slate-700: #24475A;
+  --slate-600: #2C5567; /* 信息 */
+  --slate-100: #E4ECEF;
+  --slate-200: #BFD0D8;
+
+  /* ==========================================================================
+     5. SEMANTIC · 表面与文字
+     ========================================================================== */
+  --color-bg-app: var(--paper-100); /* 应用画布 */
+  --color-bg-chrome: var(--paper-200); /* 侧边栏 / 标题栏 */
+  --color-bg-surface: var(--paper-050); /* 卡片 */
+  --color-bg-raised: var(--paper-000); /* 浮层、弹窗、输入 */
+  --color-bg-subtle: var(--paper-300); /* hover */
+  --color-bg-sunken: var(--paper-200); /* 内嵌区 */
+  --color-bg-inverse: var(--ink-900);
+  --color-bg-scrim: rgba(14, 21, 29, 0.46); /* 模态遮罩 */
+  --color-bg-selection: rgba(200, 66, 45, 0.1);
+
+  --color-text-primary: var(--ink-900);
+  --color-text-secondary: var(--ink-700);
+  --color-text-tertiary: var(--ink-500);
+  --color-text-quaternary: var(--ink-400);
+  --color-text-disabled: var(--ink-300);
+  --color-text-on-accent: #FFF7F2;
+  --color-text-on-inverse: var(--ink-inverse);
+  --color-text-link: var(--vermilion-600);
+
+  /* 语义状态：文字 / 底 / 边 三件套成对使用 */
+  --color-success: var(--green-600);
+  --color-success-strong: var(--green-700);
+  --color-success-bg: var(--green-100);
+  --color-success-border: var(--green-200);
+
+  --color-warning: var(--amber-600);
+  --color-warning-strong: var(--amber-700);
+  --color-warning-bg: var(--amber-100);
+  --color-warning-border: var(--amber-200);
+
+  --color-danger: var(--red-600);
+  --color-danger-strong: var(--red-700);
+  --color-danger-bg: var(--red-100);
+  --color-danger-border: var(--red-200);
+
+  --color-info: var(--slate-600);
+  --color-info-strong: var(--slate-700);
+  --color-info-bg: var(--slate-100);
+  --color-info-border: var(--slate-200);
+
+  --color-neutral-bg: var(--paper-300);
+  --color-neutral-border: var(--paper-500);
+
+  /* 强调（朱红） */
+  --color-accent: var(--vermilion-500);
+  --color-accent-hover: var(--vermilion-600);
+  --color-accent-active: var(--vermilion-700);
+  --color-accent-bg: var(--vermilion-100);
+  --color-accent-border: var(--vermilion-200);
+
+  /* ==========================================================================
+     6. SEMANTIC · 分隔线 / 边框（1px 发丝线，墨色低透明度）
+     ========================================================================== */
+  --rule-hairline: 1px solid rgba(22, 32, 43, 0.1);
+  --rule-soft: 1px solid rgba(22, 32, 43, 0.16);
+  --rule-strong: 1px solid rgba(22, 32, 43, 0.28);
+  --rule-inverse: 1px solid rgba(251, 248, 241, 0.16);
+
+  --color-rule: rgba(22, 32, 43, 0.1);
+  --color-rule-soft: rgba(22, 32, 43, 0.16);
+  --color-rule-strong: rgba(22, 32, 43, 0.28);
+  --color-rule-dotted: rgba(22, 32, 43, 0.24);
+
+  --border-width-thin: 1px;
+  --border-width-strong: 2px;
+
+  /* ==========================================================================
+     7. TYPOGRAPHY · 字体栈
+     中文字体是主角：标题用宋体（衬线），正文用苹方/微软雅黑，
+     英文与数字用克制的几何无衬线 + 等宽字体承载编号 / 时间 / 路径。
+     全部为系统字体，不依赖网络字体。
+     ========================================================================== */
+  --font-serif: "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC",
+    "SimSun", serif;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI",
+    "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font-latin: "Avenir Next", "Avenir", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Consolas", "Cascadia Mono", "DejaVu Sans Mono",
+    ui-monospace, monospace;
+
+  /* 语义字体角色 */
+  --type-display: var(--font-serif); /* 页面标题 / 关键数字标题 */
+  --type-body: var(--font-sans); /* 正文 */
+  --type-ui: var(--font-sans); /* 控件 */
+  --type-numeric: var(--font-mono); /* 时间 / 大小 / 路径 / 编号 */
+
+  /* 字号阶梯（正文 15–16px 起，适配 1366×768 与 1920×1080） */
+  --text-2xs: 10px; /* 仅用于英文字母大写的微标签 */
+  --text-xs: 11px;
+  --text-sm: 13px; /* 表格次要信息、徽章 */
+  --text-label: 12px; /* 表单标签、辅助说明 */
+  --text-md: 14px; /* 密集表格正文 */
+  --text-base: 15px; /* 默认正文 */
+  --text-lg: 16px; /* 重要正文 / 列表主文 */
+  --text-xl: 18px; /* 卡片小标题 */
+  --text-2xl: 22px; /* 卡片数字 */
+  --text-3xl: 28px; /* 页面标题 */
+  --text-4xl: 34px; /* KPI 数字 */
+  --text-5xl: 44px; /* 单屏主数字 */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.4;
+  --leading-normal: 1.6;
+  --leading-loose: 1.8;
+
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.12em; /* 中文小标签 / 英文大写 */
+  --tracking-stamp: 0.28em; /* 印章字距 */
+
+  /* ==========================================================================
+     8. SPACING · 4px 基数（表内用 4/6，卡片内用 16/20，区块间用 24/32）
+     ========================================================================== */
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 16px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 28px;
+  --space-11: 32px;
+  --space-12: 40px;
+  --space-13: 48px;
+  --space-14: 56px;
+  --space-15: 64px;
+
+  /* ==========================================================================
+     9. RADIUS · 工业精度：小圆角，不做胶囊按钮
+     ========================================================================== */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-window: 8px;
+  --radius-round: 999px; /* 仅状态圆点 */
+
+  /* ==========================================================================
+     10. ELEVATION · 极克制的关系阴影（纸片叠放，不是玻璃）
+     ========================================================================== */
+  --shadow-xs: 0 1px 0 rgba(22, 32, 43, 0.04);
+  --shadow-sm: 0 1px 2px rgba(22, 32, 43, 0.06), 0 1px 1px rgba(22, 32, 43, 0.04);
+  --shadow-md: 0 2px 6px rgba(22, 32, 43, 0.08), 0 1px 2px rgba(22, 32, 43, 0.05);
+  --shadow-lg: 0 10px 24px rgba(22, 32, 43, 0.12), 0 2px 6px rgba(22, 32, 43, 0.06);
+  --shadow-xl: 0 24px 48px rgba(14, 21, 29, 0.18), 0 4px 12px rgba(14, 21, 29, 0.08);
+  --shadow-window: 0 40px 80px rgba(8, 12, 16, 0.42), 0 8px 20px rgba(8, 12, 16, 0.28),
+    0 0 0 1px rgba(8, 12, 16, 0.35);
+  --shadow-inset-paper: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+
+  /* 焦点环：必须清晰可见（键盘可达性） */
+  --focus-ring-color: rgba(200, 66, 45, 0.55);
+  --focus-ring: 0 0 0 2px var(--color-bg-app), 0 0 0 4px var(--focus-ring-color);
+  --focus-ring-inset: inset 0 0 0 2px var(--focus-ring-color);
+
+  /* ==========================================================================
+     11. MOTION · 短、稳、不花哨（无弹跳、无视差）
+     ========================================================================== */
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 240ms;
+  --dur-pulse: 2400ms;
+
+  --ease-standard: cubic-bezier(0.2, 0.75, 0.3, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0.1, 0.2, 1);
+  --ease-linear: linear;
+
+  /* ==========================================================================
+     12. LAYOUT · 窗口与栅格
+     ========================================================================== */
+  --window-w: 1408px;
+  --window-h: 868px;
+  --titlebar-h: 40px;
+  --sidebar-w: 236px;
+  --content-pad-x: 24px;
+  --content-pad-y: 20px;
+  --grid-gap: 16px;
+
+  --row-h-compact: 36px;
+  --row-h-base: 44px;
+  --row-h-comfy: 56px;
+  --control-h-sm: 30px;
+  --control-h-md: 36px;
+  --control-h-lg: 40px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 18px;
+  --icon-xl: 22px;
+
+  /* ==========================================================================
+     13. Z-INDEX
+     ========================================================================== */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-overlay: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+}
+
+/* 尊重系统「减少动态效果」设置 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+}
