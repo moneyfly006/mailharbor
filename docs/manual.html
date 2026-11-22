@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>邮箱资料助手 · 配置与使用说明书</title>
+<style>
+  :root{
+    --ink:#16202B; --ink2:#333F4C; --ink3:#5E6873; --ink4:#7C858F;
+    --paper:#FAF7F0; --paper2:#F5F1E7; --rule:rgba(22,32,43,.12);
+    --red:#C8422D; --red2:#A83321; --green:#2C6B4B; --amber:#96660F;
+    --serif:"Songti SC","Source Han Serif SC",Georgia,serif;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--sans);color:var(--ink);font-size:10.5pt;line-height:1.72;background:#fff}
+  h1,h2,h3,h4{font-family:var(--serif);font-weight:600;margin:0}
+  h1{font-size:30pt;line-height:1.25;letter-spacing:.01em}
+  h2{font-size:17pt;margin:0 0 3mm;padding-bottom:2.5mm;border-bottom:1px solid var(--rule)}
+  h3{font-size:12.5pt;margin:6mm 0 2mm;color:var(--ink)}
+  h4{font-size:11pt;margin:4mm 0 1.5mm;color:var(--ink2)}
+  p{margin:0 0 2.5mm}
+  code,kbd{font-family:var(--mono);font-size:9.5pt;background:var(--paper2);padding:.4mm 1.4mm;border-radius:1mm;border:1px solid rgba(22,32,43,.08)}
+  kbd{font-size:8.5pt}
+  .muted{color:var(--ink3)}
+  .kicker{font-family:var(--mono);font-size:8.5pt;letter-spacing:.32em;color:var(--red);text-transform:uppercase}
+  /* 每个大章节从新页开始；章节内容长时自然续页，避免图片被硬裁 */
+  section.page{page-break-before:always; page-break-after:auto}
+  section.page.cover{page-break-before:avoid; page-break-after:always}
+  h2{page-break-after:avoid}
+  h3,h4{page-break-after:avoid}
+  .lead-in{page-break-after:avoid}
+  /* 封面 */
+  .cover{height:235mm;display:flex;flex-direction:column;justify-content:center}
+  .cover .t{margin:8mm 0 5mm}
+  .cover .lead{font-size:12pt;color:var(--ink2);max-width:150mm;line-height:1.85}
+  .cover .meta{margin-top:14mm;padding-top:5mm;border-top:1px solid var(--rule);font-family:var(--mono);font-size:8.5pt;color:var(--ink4);line-height:2}
+  .toc{margin:4mm 0 0;padding:0;list-style:none;font-size:10.5pt}
+  .toc li{display:flex;justify-content:space-between;gap:8mm;padding:1.6mm 0;border-bottom:1px dotted var(--rule)}
+  .toc li b{font-weight:600}
+  /* 步骤 */
+  .steps{counter-reset:step;margin:0 0 3mm;padding:0;list-style:none}
+  .steps>li{counter-increment:step;position:relative;padding:0 0 3mm 11mm;break-inside:avoid}
+  .steps>li:before{content:counter(step);position:absolute;left:0;top:.4mm;width:6.4mm;height:6.4mm;border:1px solid var(--red);color:var(--red2);
+    border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:8.5pt;background:#fff}
+  .steps>li b{display:block;font-weight:600;margin-bottom:.6mm}
+  /* 提示框 */
+  .note,.warn,.tip{border-left:2px solid;padding:2.6mm 3.4mm;margin:3mm 0;font-size:9.6pt;line-height:1.68;break-inside:avoid}
+  .note{border-color:var(--ink4);background:var(--paper)}
+  .warn{border-color:var(--red);background:#FFF7F4}
+  .tip{border-color:var(--green);background:#F3F7F2}
+  .note b,.warn b,.tip b{font-weight:600}
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;margin:3mm 0 4mm;font-size:9.3pt;break-inside:avoid}
+  th,td{border:1px solid var(--rule);padding:1.8mm 2.4mm;text-align:left;vertical-align:top}
+  th{background:var(--paper2);font-weight:600;font-size:9pt}
+  td code{font-size:8.8pt}
+  /* 图 */
+  figure{margin:3mm 0 4mm;break-inside:avoid}
+  figure img{width:100%;border:1px solid var(--rule);border-radius:1.2mm;display:block}
+  figcaption{font-size:8.8pt;color:var(--ink3);margin-top:1.6mm}
+  .shot-sm{max-width:128mm;margin-left:auto;margin-right:auto}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:5mm}
+  .kv{font-size:9.4pt}
+  .kv td:first-child{width:34mm;color:var(--ink3);white-space:nowrap}
+  .badge{display:inline-block;font-family:var(--mono);font-size:8pt;padding:.3mm 1.6mm;border-radius:1mm;border:1px solid var(--rule);background:var(--paper)}
+  .badge.red{color:var(--red2);border-color:rgba(200,66,45,.4);background:#FFF7F4}
+  .badge.green{color:var(--green);border-color:rgba(44,107,75,.35);background:#F3F7F2}
+  .lead-in{font-size:11pt;color:var(--ink2);margin-bottom:4mm}
+  .hr{height:1px;background:var(--rule);margin:5mm 0}
+  .anchor{color:var(--red2);font-weight:600}
+  @page{size:A4 portrait;margin:16mm 15mm 14mm}
+  @media print{ body{background:#fff} .cover{height:auto} }
+</style>
+</head>
+<body>
+
+<!-- ============ 封面 ============ -->
+<section class="page cover">
+  <div class="kicker">邮箱资料助手 · 配置与使用说明书</div>
+  <div class="t"><h1>从装好，<br>到第一封客户邮件<br>自动落进文件夹</h1></div>
+  <p class="lead">
+    这份手册按「安装 → 配邮箱 → 配规则 → 配回信 → 日常使用」的顺序写，
+    每一步都标明<b>在哪里点、填什么、成功长什么样、报错怎么办</b>。
+    照着手册走一遍，约 15 分钟；配好之后不需要每天维护。
+  </p>
+  <div class="meta">
+    适用版本：v0.1.11 及以上（Windows 10 / 11 x64）<br>
+    文档版本：v1.0 · 2026-11-22<br>
+    配套文档：邮箱资料助手-设计说明书.pdf（界面设计图）、README.md（技术说明）
+  </div>
+</section>
+
+<!-- ============ 目录 ============ -->
+<section class="page">
+  <h2>目录</h2>
+  <ul class="toc">
+    <li><b>1. 安装</b><span>系统要求 · 安装步骤 · 第一次打开 · 卸载与数据位置</span></li>
+    <li><b>2. 配置邮箱账户</b><span>Gmail · QQ · 企业邮箱 · 仅发件账户 · 网络代理 · 报错对照</span></li>
+    <li><b>3. 配置触发规则</b><span>关键词、路径数量、必达、附件类型、补扫历史</span></li>
+    <li><b>4. 配置自动回复</b><span>模板、变量、署名、发信账户、防轰炸、测试信</span></li>
+    <li><b>5. 日常使用</b><span>概览 · 规则路径卡片 · 下载记录 · 托盘 · 自动更新</span></li>
+    <li><b>6. 常见问题（FAQ）</b><span>连不上、认证失败、代理、杀软、Outlook、乱码</span></li>
+    <li><b>7. 附录</b><span>邮箱参数速查 · 数据备份 · 术语表</span></li>
+  </ul>
+
+  <h3>开始前，你需要准备</h3>
+  <table class="kv">
+    <tr><td>收件邮箱</td><td>一个支持 IMAP 的邮箱（Gmail / QQ / 企业邮箱）。<b>Gmail 需要先开两步验证并生成「应用专用密码」</b>；QQ 需要「授权码」。</td></tr>
+    <tr><td>存储盘</td><td>建议单独一块盘或目录（如 <code>D:\POD\生产</code>、<code>E:\POD\备份</code>），预留至少几十 GB 给客户图稿。</td></tr>
+    <tr><td>电脑</td><td>Windows 10/11，长期开机不关机，建议关闭睡眠（控制面板 → 电源选项）。</td></tr>
+    <tr><td>网络</td><td>国内访问 Gmail 需要代理；访问 QQ / 企业邮箱一般不需要。</td></tr>
+  </table>
+</section>
+
+<!-- ============ 1 安装 ============ -->
+<section class="page">
+  <h2>1. 安装</h2>
+
+  <h3>1.1 系统要求</h3>
+  <table class="kv">
+    <tr><td>系统</td><td>Windows 10 1809 及以上 / Windows 11（64 位）</td></tr>
+    <tr><td>内存</td><td>4 GB 以上（软件常驻约 150–250 MB）</td></tr>
+    <tr><td>磁盘</td><td>程序约 300 MB + 客户图稿所需空间</td></tr>
+    <tr><td>权限</td><td>按当前用户安装，<b>不需要管理员权限</b></td></tr>
+  </table>
+
+  <h3>1.2 安装步骤</h3>
+  <ol class="steps">
+    <li><b>下载安装包</b>文件名形如 <code>MailHarbor-Setup-0.1.11.exe</code>（116 MB）。放在桌面或下载目录。</li>
+    <li><b>双击运行</b>如出现蓝色「Windows 已保护你的电脑」，点「<b>更多信息</b>」→「<b>仍要运行</b>」。这是未购买代码签名证书时的正常提示，不影响使用。</li>
+    <li><b>选择安装位置</b>向导第 2 步会出现「选择安装位置」。默认 <code>%LOCALAPPDATA%\Programs\邮箱资料助手</code>；想装到 D 盘可点「浏览」改成 <code>D:\软件\邮箱资料助手</code>。<b>路径可以带中文</b>。</li>
+    <li><b>完成安装</b>点「安装」，约 10–30 秒完成。勾选「运行邮箱资料助手」可直接打开。</li>
+    <li><b>确认桌面图标</b>桌面会出现朱红信封图标「<b>邮箱资料助手</b>」；开始菜单同名入口。双击即可打开。</li>
+  </ol>
+  <div class="note"><b>装完没看到桌面图标？</b>到 <code>%LOCALAPPDATA%\Programs\邮箱资料助手</code> 找 <code>邮箱资料助手.exe</code>，右键「发送到 → 桌面快捷方式」即可。也可在安装目录重新运行安装包选「修复」。</div>
+
+  <h3>1.3 第一次打开</h3>
+  <p>首次启动会自动做三件事：建数据库、创建默认存储目录、<b>预置三条标题规则</b>（原图+手机壳 / 原图+卡套 / 原图+浴室垫）。软件默认<b>不监听</b>，需要先配好邮箱再开始收件。</p>
+  <figure><img src="assets/manual/01-dashboard.jpg"><figcaption>首次打开：左上是监听状态，中间是「触发规则 · 存储路径」卡片（此时路径是默认值，稍后可改）</figcaption></figure>
+
+  <h3>1.4 卸载与数据位置</h3>
+  <table class="kv">
+    <tr><td>程序目录</td><td><code>%LOCALAPPDATA%\Programs\邮箱资料助手</code>（若安装时改过路径，以实际为准）</td></tr>
+    <tr><td>配置与数据库</td><td><code>%APPDATA%\邮箱资料助手\mailharbor.db</code>（含账户、规则、下载记录；密码经 Windows DPAPI 加密）</td></tr>
+    <tr><td>卸载</td><td>设置 → 应用 → 邮箱资料助手 → 卸载。<b>默认保留</b>上面的数据目录，重装后配置还在；确认不再使用可手动删除该目录。</td></tr>
+  </table>
+</section>
+
+<!-- ============ 2 邮箱 ============ -->
+<section class="page">
+  <h2>2. 配置邮箱账户</h2>
+  <p class="lead-in">点左侧「<b>邮箱账户</b>」→ 右边「添加邮箱账户」。先选服务商，软件会自动填好服务器地址与端口，你只需要填账号和密码。</p>
+  <figure><img src="assets/manual/02-accounts.jpg"><figcaption>邮箱账户页：左边是已添加账户，右边是添加表单。服务商选好后服务器参数自动填</figcaption></figure>
+
+  <h3>2.1 先搞清楚：你需要哪种账户</h3>
+  <table>
+    <tr><th style="width:42mm">类型</th><th>收信</th><th>回信</th><th>典型场景</th></tr>
+    <tr><td><b>收 + 发一体</b>（默认）</td><td>IMAP</td><td>SMTP</td><td>Gmail、QQ、企业邮箱 —— 收客户邮件并用同一个邮箱回信</td></tr>
+    <tr><td><b>仅发件</b></td><td>—</td><td>SMTP</td><td>阿里云 DirectMail、SendGrid 等「邮件推送」服务：<b>只能发不能收</b>，用作回信发件箱</td></tr>
+  </table>
+  <div class="tip"><b>最常见组合：</b>收件用 Gmail / QQ，回信用公司域名邮箱（如 <code>noreply@yourdomain.com</code>）。第 1 个账户按「收+发」配，公司邮箱勾「仅发件」，再到「自动回复 → 回信用哪个账户发信」里选中它。</div>
+</section>
+
+<section class="page">
+  <h3>2.2 Gmail（最常用）</h3>
+  <ol class="steps">
+    <li><b>先开两步验证</b>浏览器打开 <code>myaccount.google.com/security</code> → 「两步验证」→ 按提示开启（需要手机号）。</li>
+    <li><b>生成应用专用密码</b>同一页面搜索或进入「<b>应用专用密码</b>」→ 名称填 <code>邮箱资料助手</code> → 生成 → 得到 <b>16 位密码</b>（形如 <code>abcd efgh ijkl mnop</code>）。<b>这个才是要填进软件的密码</b>，不是你的 Gmail 登录密码。</li>
+    <li><b>回到软件</b>服务商选「Gmail」→ 服务器自动变成 <code>imap.gmail.com:993 SSL</code> / <code>smtp.gmail.com:465 SSL</code>。</li>
+    <li><b>填写账号与密码</b>「账号（邮箱地址）」填完整 Gmail 地址；「密码（应用专用密码）」粘贴 16 位密码（可带空格）。发件服务器默认「与收件相同账号」保持开启。</li>
+    <li><b>点「测试连接」</b>下方会出现两行结果：<span class="badge green">IMAP ✓</span> <span class="badge green">SMTP ✓</span> 都变成绿色才算成功（会显示耗时与「经代理/直连」）。</li>
+    <li><b>保存并启用</b>点右下「保存并启用」。账户卡片状态变成 <span class="badge green">已启用</span>，软件开始收信。</li>
+  </ol>
+  <div class="warn"><b>常见错误 535「用户名或密码不正确」：</b>九成是把 Gmail 登录密码填进去了。请回去生成并粘贴<b>应用专用密码</b>；改好后点卡片上的「测试连接」会自动恢复并补收。</div>
+  <div class="warn"><b>连接超时：</b>国内直连 Gmail 的 IMAP 993 经常被阻断。先打开代理软件（Clash / V2Ray 等），再到「邮箱账户 → 网络代理」确认是「跟随系统」或手填 SOCKS5 端口，点「测试代理」通过后再测连接。</div>
+</section>
+
+<section class="page">
+  <h3>2.3 QQ 邮箱</h3>
+  <ol class="steps">
+    <li><b>开启 IMAP/SMTP 服务</b>登录 QQ 邮箱网页版 → 设置 → 账户 → 找到「POP3/IMAP/SMTP 服务」→ <b>开启 IMAP/SMTP 服务</b>（需短信验证）。</li>
+    <li><b>生成授权码</b>按提示验证后，页面会显示 <b>16 位授权码</b>，复制保存（关闭页面后不再显示）。</li>
+    <li><b>回到软件</b>服务商选「QQ 邮箱」→ 自动填 <code>imap.qq.com:993</code> / <code>smtp.qq.com:465</code>。</li>
+    <li><b>填账号 + 授权码</b>密码框填 16 位授权码（不是 QQ 登录密码）。</li>
+    <li><b>测试连接 → 保存并启用</b>同 Gmail。QQ 一般不需要代理。</li>
+  </ol>
+
+  <h3>2.4 企业邮箱 / 自建 IMAP 服务器</h3>
+  <p>服务商选「自定义」，然后按邮件服务商给的参数填写：</p>
+  <table>
+    <tr><th>字段</th><th>怎么填</th></tr>
+    <tr><td>收件服务器 / 端口</td><td>如 <code>mail.company.com</code> + <code>993</code>（SSL/TLS）。若服务商给的是 <code>143</code>，加密方式选 <b>STARTTLS</b>。</td></tr>
+    <tr><td>发件服务器 / 端口</td><td>如 <code>mail.company.com</code> + <code>465</code>（SSL/TLS）；给 <code>587</code> 就选 <b>STARTTLS</b>。</td></tr>
+    <tr><td>账号 / 密码</td><td>通常是完整邮箱地址 + 邮箱密码（部分企业邮箱需在管理后台单独开启 IMAP/SMTP）。</td></tr>
+    <tr><td>允许自签名证书</td><td>公司内网服务器证书不是公网 CA 签发时打开；公共邮箱（Gmail/QQ/阿里云）<b>不要打开</b>。</td></tr>
+  </table>
+
+  <h3>2.5 仅发件账户（阿里云 DirectMail 等）</h3>
+  <ol class="steps">
+    <li>添加账户时把「<b>此邮箱只用于发信（没有收件箱）</b>」开关打开，收件服务器一栏会隐藏。</li>
+    <li>发件服务器按服务商填：阿里云 DirectMail 是 <code>smtpdm.aliyun.com</code> + <code>465</code> SSL；账号填发信地址（如 <code>noreply@yourdomain.com</code>），密码填 SMTP 密码。</li>
+    <li>测试连接只需要 <span class="badge green">SMTP ✓</span>；IMAP 一行会显示「该账户设为仅发件，跳过收件测试」。</li>
+    <li>保存后到「<b>自动回复 → 回信用哪个账户发信</b>」选中这个账户，之后客户收到的回信就来自你的公司域名。</li>
+  </ol>
+  <div class="note">阿里云 DirectMail 属于「邮件推送」服务：<b>没有收件箱，不能收客户邮件</b>。收件必须另配 Gmail / QQ / 企业邮箱。另外它要求发信域名已完成验证，否则可能报 551。</div>
+</section>
+
+<section class="page">
+  <h3>2.6 网络代理（国内访问 Gmail 必须）</h3>
+  <p>在「邮箱账户」页顶部点「<b>网络代理</b>」展开：</p>
+  <figure><img src="assets/manual/03-proxy.jpg"><figcaption>网络代理：默认「跟随系统」；也可手填 SOCKS5 / HTTP。点「测试代理」会直接验证能否连到 imap.gmail.com:993</figcaption></figure>
+  <table>
+    <tr><th style="width:32mm">模式</th><th>说明</th></tr>
+    <tr><td>跟随系统（默认）</td><td>自动读取 Windows 的 Internet 代理设置 / 环境变量。先打开 Clash、V2Ray 等并开启「系统代理」，再选这个。</td></tr>
+    <tr><td>不使用</td><td>直连。国外服务器、企业内网用。</td></tr>
+    <tr><td>SOCKS5</td><td>手填地址端口，如 <code>127.0.0.1:7890</code>（Clash 的混合端口）。</td></tr>
+    <tr><td>HTTP</td><td>手填 HTTP 代理地址端口，软件会走 CONNECT 隧道。</td></tr>
+  </table>
+  <div class="tip">IMAP/SMTP 是裸 TCP，不能像浏览器那样直接吃系统代理。软件内部做了<b>本地端口转发桥</b>：它先连你的代理，再由代理连 <code>imap.gmail.com:993</code>，证书仍按真实域名校验，所以「测试代理」通过后「测试连接」一般就能通过。</div>
+
+  <h3>2.7 测试连接的报错对照表</h3>
+  <table>
+    <tr><th style="width:52mm">提示</th><th>原因</th><th>解决</th></tr>
+    <tr><td>IMAP 登录被拒绝（535）</td><td>密码错 / 用了登录密码</td><td>Gmail 用应用专用密码；QQ 用授权码</td></tr>
+    <tr><td>连接超时 / 端口无法连接</td><td>网络不通或被墙</td><td>开代理并在「网络代理」里设置；企业网让 IT 放行 993/465</td></tr>
+    <tr><td>IMAP 加密连接失败（证书）</td><td>自签名证书</td><td>自建服务器勾「允许自签名证书」；公共邮箱不要勾</td></tr>
+    <tr><td>IMAP 未开启</td><td>服务商没开 IMAP</td><td>QQ 去邮箱设置开启；企业邮箱找管理员</td></tr>
+    <tr><td>551 Main account unavailable</td><td>阿里云 DirectMail 发信域名/账号未验证</td><td>到阿里云控制台完成域名验证，或换账号</td></tr>
+    <tr><td>Outlook 预设提示不支持</td><td>微软已停用基本认证</td><td>改用 Gmail / QQ / 企业邮箱；Outlook 需 OAuth，当前版本不支持</td></tr>
+  </table>
+</section>
+
+<!-- ============ 3 规则 ============ -->
+<section class="page">
+  <h2>3. 配置触发规则</h2>
+  <p class="lead-in">规则决定「<b>什么标题的邮件、存到哪些文件夹</b>」。软件出厂预置三条，你可以随便改、加、删。</p>
+  <figure><img src="assets/manual/04-rules.jpg"><figcaption>触发规则页：左边关键词列表（可拖拽排序、启停），右边编辑选中规则</figcaption></figure>
+
+  <h3>3.1 预置的三条规则</h3>
+  <table>
+    <tr><th>关键词</th><th>目标路径</th><th>含义</th></tr>
+    <tr><td><code>原图+手机壳</code></td><td>1 个：<code>D:\POD\生产\手机壳</code></td><td>标题命中就存一份</td></tr>
+    <tr><td><code>原图+卡套</code></td><td>2 个：<code>D:\POD\生产\卡套</code> + <code>E:\POD\备份\卡套</code></td><td>同一份文件复制两份（生产 + 备份）</td></tr>
+    <tr><td><code>原图+浴室垫</code></td><td>1 个：<code>D:\POD\生产\浴室垫</code></td><td>标题命中就存一份</td></tr>
+  </table>
+  <div class="note">预置路径只是默认值。如果电脑没有 D:/E: 盘，卡片里会显示「路径不可用」，直接点路径旁边的手改成本机目录即可（例如 <code>D:\POD\生产\卡套</code> 改成 <code>C:\POD\生产\卡套</code>）。</div>
+
+  <h3>3.2 新建一条规则</h3>
+  <ol class="steps">
+    <li>点右上「<b>+ 新增关键词</b>」。</li>
+    <li><b>填关键词</b>例如 <code>原图+卫衣</code>。建议原样照抄客户邮件标题里的写法。</li>
+    <li><b>选匹配范围</b>「仅标题」（推荐）或「标题+正文」。<b>选匹配方式</b>：<span class="badge">精确</span> 要求标题就是关键词（允许后面跟「追加/打样」等说明、允许 RE:/FWD: 前缀）；<span class="badge">包含</span> 只要标题里出现关键词就算。</li>
+    <li><b>设置路径数量</b>点标题旁 <b>− 2 个路径 +</b> 的加号增加路径；也可点「添加一条路径」/「浏览文件夹…」。每个路径都能：手输、点文件夹图标打开、垃圾桶删除、开关「必达」。</li>
+    <li><b>选附件类型</b>默认 ZIP/TIF/TIFF/JPG/PNG/PDF 全选。不在白名单的附件会被忽略。</li>
+    <li><b>是否自动回信</b>默认开。关掉则这条规则只落盘不回信。</li>
+    <li><b>保存规则</b>右下角。保存后<b>立即生效，无需重启</b>；软件会自动补扫之前「未命中」的历史邮件。</li>
+  </ol>
+  <div class="tip"><b>「必达」是什么意思？</b>两个路径都开必达时，任意一个失败 → 这封邮件标记「待重试」，<b>只重试失败的那个路径</b>，已成功的不会重复写；全部成功后才会回信。如果某个路径只是备份、丢了也无所谓，可以关掉它的必达——失败只记录，不阻塞回信。</div>
+</section>
+
+<section class="page">
+  <h3>3.3 编辑、停用、删除</h3>
+  <ul>
+    <li><b>编辑</b>左侧点关键词 → 右侧改 → 「保存规则」。</li>
+    <li><b>停用</b>左侧列表的开关关闭即可（历史记录保留）。</li>
+    <li><b>删除</b>右侧右上角垃圾桶 → 弹窗确认。删除只影响以后新邮件，<b>已下载的文件与记录都保留</b>。</li>
+    <li><b>调整优先级</b>左侧拖动排序（或 Alt+↑/↓）。一封邮件同时命中多条规则时，默认<b>全部执行</b>（比如标题同时含手机壳+卡套，就两套文件夹都存）。</li>
+  </ul>
+
+  <h3>3.4 关键词匹配规则（重要）</h3>
+  <table>
+    <tr><th style="width:62mm">客户写的标题</th><th>精确模式</th><th>说明</th></tr>
+    <tr><td><code>原图+卡套</code></td><td>✔ 命中</td><td>完全一致</td></tr>
+    <tr><td><code>RE: 原图+卡套</code></td><td>✔ 命中</td><td>自动去掉 RE:/FWD: 等前缀</td></tr>
+    <tr><td><code>原图+卡套 追加: POD_20486</code></td><td>✔ 命中</td><td>关键词后有空格/分隔符</td></tr>
+    <tr><td><code>原图+卡套打样确认</code></td><td>✔ 命中</td><td>后接「追加/打样/补发/确认/第…」等业务词</td></tr>
+    <tr><td><code>原图+卡套盒</code></td><td>✘ 不命中</td><td>「卡套盒」是不同品类，避免误归</td></tr>
+    <tr><td><code>原图＋卡套</code>（全角＋）</td><td>✔ 命中</td><td>全角/半角、空格自动归一</td></tr>
+  </table>
+</section>
+
+<!-- ============ 4 自动回复 ============ -->
+<section class="page">
+  <h2>4. 配置自动回复</h2>
+  <figure><img src="assets/manual/05-autoreply.jpg"><figcaption>自动回复页：左边模板编辑，右边实时预览；下方是发送设置</figcaption></figure>
+
+  <ol class="steps">
+    <li><b>打开总开关</b>左上「自动回复已开启」。</li>
+    <li><b>选语言</b>「中文 / English / 中英双语」三个标签。编辑哪个语言就保存哪个语言的内容。</li>
+    <li><b>写主题与正文</b>点「插入变量」把 <code>{关键词}</code> <code>{文件名}</code> <code>{数量}</code> <code>{时间}</code> <code>{工厂名}</code> 插到光标处；右侧实时预览是客户看到的样子。</li>
+    <li><b>填回信署名</b>「回信署名（工厂名）」例如 <code>海印 POD · 印前组</code>，会替换模板里的 <code>{工厂名}</code>。</li>
+    <li><b>选发信账户</b>「回信用哪个账户发信」默认「跟随收信账户」；如果要用公司域名发信，选那个「仅发件」账户。</li>
+    <li><b>设置防轰炸</b>「回复延迟」默认 10 秒（等文件写完再回）；「每小时上限」默认 60 封；「同一线程只回一次」保持开。</li>
+    <li><b>发送测试信</b>点「发送测试信」，会用当前设置给账户自己发一封样张，确认客户收到的是什么样子。</li>
+    <li><b>保存模板</b>右上角。之后命中规则的邮件在文件全部落盘后自动回信。</li>
+  </ol>
+  <div class="warn"><b>回信的三个硬规则（不可关）：</b>① 只有所有「必达路径」都成功后才会回信；② 同一封邮件的线程只回一次；③ 发件人是自己 / no-reply / 自动回复类邮件，一律不回，避免回信轰炸。</div>
+</section>
+
+<!-- ============ 5 日常 ============ -->
+<section class="page">
+  <h2>5. 日常使用</h2>
+
+  <h3>5.1 概览：一眼看今天有没有漏件</h3>
+  <figure><img src="assets/manual/01-dashboard.jpg"><figcaption>概览：监听状态、今日统计、邮箱健康、目标盘剩余空间、规则与路径、最近收件、失败待重试</figcaption></figure>
+  <ul>
+    <li><b>今日统计</b>收到邮件 / 命中规则 / 归档文件 / 失败待重试。</li>
+    <li><b>触发规则 · 存储路径</b>每条关键词 → 对应文件夹。<b>点任意路径</b>直接在资源管理器打开，查看刚收到的图稿。</li>
+    <li><b>失败待重试</b>显示哪条路径失败、原因（盘未连接 / 空间不足），按钮是「重试这条路径」——只补失败的那份。</li>
+    <li><b>开始/暂停监听</b>右上角按钮。暂停期间到达的邮件会在恢复后补收。</li>
+  </ul>
+
+  <h3>5.2 下载记录：查件与对账</h3>
+  <figure><img src="assets/manual/06-records.jpg"><figcaption>下载记录：筛状态、搜索主题/文件/发件人、每个路径结果 D✓ E✓ F✗、行内重试、导出 CSV</figcaption></figure>
+  <ul>
+    <li><b>搜索</b>支持主题、附件文件名、发件人、命中关键词（Ctrl+K 聚焦）。</li>
+    <li><b>按路径重试</b>失败行点「重试 F」，只补 F 盘那一份。</li>
+    <li><b>打开文件夹</b>行尾文件夹图标。</li>
+    <li><b>导出 CSV</b>右上角，可用 Excel 打开对账。</li>
+  </ul>
+
+  <h3>5.3 托盘与常驻</h3>
+  <ul>
+    <li>关闭窗口 = 收进托盘，<b>不会退出</b>；托盘右键可暂停监听、立即检查、打开存储目录、退出。</li>
+    <li>开机自启：默认随安装开启；可在托盘/设置里确认。</li>
+    <li>电脑不要睡眠：控制面板 → 电源选项 → 睡眠设为「从不」。</li>
+  </ul>
+
+  <h3>5.4 自动更新</h3>
+  <p>软件左下角显示版本号与「检查更新」。启动 30 秒后自动检查一次，有新版本会后台下载，提示「重启更新」。点一下即可升级，配置和记录都保留。</p>
+  <div class="note">Windows 自动更新要求安装版（不是绿色解压版）。macOS 由于系统限制，未签名版本不会自动升级，需手动装新 dmg。</div>
+</section>
+
+<!-- ============ 6 FAQ ============ -->
+<section class="page">
+  <h2>6. 常见问题（FAQ）</h2>
+
+  <h3>Q1 测试连接一直「连接超时」？</h3>
+  <p>先确认网络：浏览器能否打开 Gmail。国内访问 Gmail 必须开代理 → 到「邮箱账户 → 网络代理」选「跟随系统」或手填 SOCKS5，点「测试代理」通过后再测连接。QQ/企业邮箱一般不需要代理。</p>
+
+  <h3>Q2 提示 535「用户名或密码不正确」？</h3>
+  <p>Gmail 要填 16 位<b>应用专用密码</b>（先开两步验证）；QQ 要填<b>授权码</b>。都不是邮箱登录密码。填好后点账户卡上的「测试连接」，会自动恢复并补收。</p>
+
+  <h3>Q3 邮件收到了，但没落盘？</h3>
+  <ol>
+    <li>看「概览 → 最近收件」里这条的状态：<span class="badge">未命中</span> 说明标题没匹配上关键词 → 检查规则的关键词与匹配方式（可先改成「包含」测试）。</li>
+    <li>状态是 <span class="badge red">附件类型不符</span> → 到规则里把该类型加进白名单。</li>
+    <li>新加规则之前收到的老邮件不会自动回来：保存规则时软件会自动补扫；也可在概览点「检查新邮件」。</li>
+  </ol>
+
+  <h3>Q4 某个盘/备份路径失败怎么办？</h3>
+  <p>概览「失败待重试」会写明原因（盘未连接 / 空间不足）。插回磁盘后点「重试这条路径」即可；已成功的路径不会重复写。</p>
+
+  <h3>Q5 文件名是乱码？</h3>
+  <p>软件已兼容 RFC 2047 / RFC 2231 / GBK 三种中文文件名编码。若仍乱码，把「下载记录」里的附件名与服务商名称发给技术支持。</p>
+
+  <h3>Q6 会不会把客户的图稿上传？</h3>
+  <p>不会。附件只在本机落盘、不回传；密码用 Windows DPAPI 加密保存在本机，日志导出也不含密码。</p>
+
+  <h3>Q7 杀毒软件报警？</h3>
+  <p>未购买代码签名证书时可能误报。把安装目录加入白名单即可；正式采购证书后不再出现。</p>
+
+  <h3>Q8 能同时监听多个邮箱吗？</h3>
+  <p>可以。添加多个账户并各自启用即可，「仅发件」账户不参与收信。</p>
+
+  <h3>Q9 想换电脑 / 重装？</h3>
+  <p>导出配置（设置里）→ 新机器装好后导入；密码需重新填一次（出于安全不导出密码）。已下载的图稿建议整个目录拷过去。</p>
+
+  <h3>Q10 Outlook / Microsoft 365 能用吗？</h3>
+  <p>不能。微软已停用 IMAP/SMTP 基本认证，只支持 OAuth；当前版本未实现。请改用 Gmail、QQ 或企业自建邮箱。</p>
+</section>
+
+<!-- ============ 7 附录 ============ -->
+<section class="page">
+  <h2>7. 附录</h2>
+
+  <h3>附录 A：邮箱参数速查</h3>
+  <table>
+    <tr><th>邮箱</th><th>收件 IMAP</th><th>发件 SMTP</th><th>密码类型</th></tr>
+    <tr><td>Gmail</td><td><code>imap.gmail.com:993 SSL</code></td><td><code>smtp.gmail.com:465 SSL</code></td><td>应用专用密码（需两步验证）</td></tr>
+    <tr><td>Google Workspace</td><td><code>imap.gmail.com:993 SSL</code></td><td><code>smtp.gmail.com:465 SSL</code></td><td>应用专用密码（管理员需允许）</td></tr>
+    <tr><td>QQ 邮箱</td><td><code>imap.qq.com:993 SSL</code></td><td><code>smtp.qq.com:465 SSL</code></td><td>16 位授权码</td></tr>
+    <tr><td>阿里云 DirectMail</td><td>—（仅发件）</td><td><code>smtpdm.aliyun.com:465 SSL</code></td><td>SMTP 密码（需验证发信域名）</td></tr>
+    <tr><td>Outlook / M365</td><td colspan="3">不支持（微软已停用基本认证）</td></tr>
+  </table>
+
+  <h3>附录 B：数据与备份位置</h3>
+  <table class="kv">
+    <tr><td>数据库</td><td><code>%APPDATA%\邮箱资料助手\mailharbor.db</code>（账户、规则、记录）</td></tr>
+    <tr><td>日志</td><td>同目录（可在设置里调整级别）</td></tr>
+    <tr><td>客户图稿</td><td>规则里配置的路径（软件不会移动或删除已有文件）</td></tr>
+    <tr><td>备份建议</td><td>定期把「数据库目录 + 图稿目录」一起备份到外接盘或 NAS</td></tr>
+  </table>
+
+  <h3>附录 C：术语表</h3>
+  <table class="kv">
+    <tr><td>IMAP</td><td>收信协议。邮件留在服务器，软件只读取，不删除、不标记已读。</td></tr>
+    <tr><td>SMTP</td><td>发信协议。只能发，不能收。</td></tr>
+    <tr><td>应用专用密码</td><td>Gmail 为第三方软件生成的 16 位密码，可单独撤销。</td></tr>
+    <tr><td>授权码</td><td>QQ 邮箱为第三方客户端生成的 16 位密码。</td></tr>
+    <tr><td>STARTTLS</td><td>先在普通端口建立连接再升级加密（常见 143 / 587）。</td></tr>
+    <tr><td>必达路径</td><td>该路径失败则整封邮件标记「待重试」并阻塞回信。</td></tr>
+    <tr><td>补扫历史</td><td>新增规则后，把之前「未命中」的邮件重新处理一遍。</td></tr>
+  </table>
+
+  <div class="hr"></div>
+  <p class="muted" style="font-size:9pt">
+    需要协助时，请提供：桌面《邮箱资料助手-测试结果.txt》（一键安装脚本会生成）、
+    「邮箱账户」页测试连接的两行结果截图、以及「下载记录」里出问题的那一行。<br>
+    项目主页：github.com/moneyfly006/mailharbor · 最新安装包：github.com/moneyfly006/mailharbor/releases/latest
+  </p>
+</section>
+
+</body>
+</html>

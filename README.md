@@ -10,12 +10,22 @@
 | 最新版本 | v0.1.11（自动更新已启用） |
 | 安装包 | [MailHarbor-Setup-0.1.11.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
 | macOS | [dmg / zip](https://github.com/moneyfly006/mailharbor/releases/latest)（arm64 + x64） |
-| 设计说明 PDF | 仓库内 [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf)<br>发布页 [MailHarbor-Design-Spec.pdf](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-Design-Spec.pdf)（6 屏设计图 + 说明） |
+| 设计说明书 | [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-Design-Spec.pdf)（6 屏高保真设计图） |
+| **配置说明书** | [docs/邮箱资料助手-配置说明书.pdf](docs/邮箱资料助手-配置说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-User-Manual.pdf)（安装→配邮箱→配规则→配回信→日常使用，21 页） |
 | 需求 / 技术 | [需求规格](docs/REQUIREMENTS.md) · [产品说明](docs/PRODUCT.md) · [技术架构](docs/ARCHITECTURE.md) · [成本估算](docs/COST.md) |
 
 **安装路径可以自己选**：安装包是多步向导（不是一键静默装），会出现「选择安装位置」这一步，默认装在
 `%LOCALAPPDATA%\Programs\邮箱资料助手`（按当前用户安装，**不需要管理员权限**），你可以改成 `D:\软件\邮箱资料助手` 等任意目录。
 装完桌面会生成「**邮箱资料助手**」快捷方式（朱红信封图标），开始菜单同名入口；卸载时会保留邮件记录与配置。
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [配置说明书（PDF）](docs/邮箱资料助手-配置说明书.pdf) | **给使用者看的**：安装、Gmail/QQ/企业邮箱配置、代理、规则与路径、自动回复、日常使用、FAQ |
+| [设计说明书（PDF）](docs/邮箱资料助手-设计说明书.pdf) | **给客户确认界面的**：6 屏高保真设计图 + 设计说明 |
+| [需求规格](docs/REQUIREMENTS.md) · [产品说明](docs/PRODUCT.md) | 需求来源、信息架构、设计决策 |
+| [技术架构](docs/ARCHITECTURE.md) · [Windows 构建](docs/BUILD-WINDOWS.md) · [成本估算](docs/COST.md) | 技术方案、打包发布、报价 |
 
 ## 当前进度
 
