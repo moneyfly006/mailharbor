@@ -1,6 +1,7 @@
 # Windows 安装包：构建、验证与交付说明
 
 > 当前产物：`release/MailHarbor-Setup-0.1.0.exe`（117 MB，NSIS，x64，按用户安装、免管理员）
+> SHA-256：`5f977ae8c6c21b0684ee58650652857e7a09a24fd6a07f1bdf49e6d1d001ad7a`
 > 构建机：macOS（交叉打包）· Electron 45.4.1 · 未签名（首次运行会有 SmartScreen 提示）
 
 ---
