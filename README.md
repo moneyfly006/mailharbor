@@ -7,8 +7,8 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 最新版本 | v0.1.10（自动更新已启用） |
-| 安装包 | [MailHarbor-Setup-0.1.10.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
+| 最新版本 | v0.1.11（自动更新已启用） |
+| 安装包 | [MailHarbor-Setup-0.1.11.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
 | macOS | [dmg / zip](https://github.com/moneyfly006/mailharbor/releases/latest)（arm64 + x64） |
 | 设计说明 PDF | 仓库内 [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf)<br>发布页 [MailHarbor-Design-Spec.pdf](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-Design-Spec.pdf)（6 屏设计图 + 说明） |
 | 需求 / 技术 | [需求规格](docs/REQUIREMENTS.md) · [产品说明](docs/PRODUCT.md) · [技术架构](docs/ARCHITECTURE.md) · [成本估算](docs/COST.md) |
