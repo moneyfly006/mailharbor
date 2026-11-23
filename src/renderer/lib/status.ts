@@ -47,6 +47,8 @@ export function messageStatusMeta(s: MessageStatus): BadgeMeta {
       return { tone: 'bad', label: '待重试' }
     case 'ignored_type':
       return { tone: 'neutral', label: '类型不符' }
+    case 'manual_needed':
+      return { tone: 'warn', label: '超大附件·待手动下载' }
     case 'ignored_no_keyword':
     default:
       return { tone: 'neutral', label: '已忽略' }

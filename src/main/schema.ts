@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS messages (
   match_source TEXT,
   status TEXT NOT NULL DEFAULT 'queued',
   reply_status TEXT NOT NULL DEFAULT 'pending',
+  links TEXT,
   error TEXT,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
   UNIQUE(account_id, imap_uid)

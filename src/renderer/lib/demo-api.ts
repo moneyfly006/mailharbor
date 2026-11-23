@@ -390,7 +390,25 @@ export function createDemoApi(): Api {
         const start = (page - 1) * pageSize
         return { total: rows.length, page, pageSize, rows: clone(rows.slice(start, start + pageSize)) }
       },
-      retryDownload: async (messageId: number) => {
+      openLink: async (url: string) => {
+      await delay(120)
+      return { ok: /^https?:/i.test(url), message: /^https?:/i.test(url) ? undefined : '只允许 http(s) 链接' }
+    },
+    archiveManual: async (messageId: number) => {
+      await delay(900)
+      const rec = state.records.find((r) => r.id === messageId)
+      if (!rec) return { ok: false, message: '找不到这封邮件' }
+      rec.status = 'done'
+      return { ok: true, archived: 2 }
+    },
+    reprocess: async (messageId: number) => {
+      await delay(700)
+      const rec = state.records.find((r) => r.id === messageId)
+      if (!rec) return { ok: false, message: '找不到这封邮件' }
+      rec.status = 'done'
+      return { ok: true }
+    },
+    retryDownload: async (messageId: number) => {
       await delay(900)
       const rec = state.records.find((r) => r.id === messageId)
       if (!rec) return { ok: false, message: '找不到这封邮件' }

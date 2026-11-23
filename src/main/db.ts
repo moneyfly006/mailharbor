@@ -41,6 +41,9 @@ function migrate(database: ReturnType<typeof openSqlite>): void {
     if (!cols('accounts').includes('send_only')) {
       database.exec('ALTER TABLE accounts ADD COLUMN send_only INTEGER NOT NULL DEFAULT 0')
     }
+    if (!cols('messages').includes('links')) {
+      database.exec('ALTER TABLE messages ADD COLUMN links TEXT')
+    }
   } catch {
     /* 迁移失败不阻塞启动（旧库仍可用，只是没有该开关） */
   }
@@ -105,6 +108,7 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   retryMaxAttempts: 8,
   downloadAttempts: 3,
   downloadTimeoutSec: 900,
+  extractArchives: true,
   multiRuleStrategy: 'all'
 }
 

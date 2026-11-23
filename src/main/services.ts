@@ -27,6 +27,13 @@ export interface Backend {
   reconcile(): Promise<void> | void
   /** 用第一个启用账户的 SMTP 发一封测试信（自动回复页「发送测试信」用） */
   testReply(to: string): Promise<{ ok: boolean; message: string; providerMessageId?: string }>
+  /** 超大附件：用户手动下载后，把选中的文件归档到规则路径（并解压） */
+  archiveManualFiles(
+    messageId: number,
+    files: string[]
+  ): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }>
+  /** 重新识别一封「未命中/类型不符」的邮件（规则改了或软件升级后可用） */
+  reprocessMessage(messageId: number): Promise<{ ok: boolean; message?: string }>
   /** 重新下载并归档指定邮件（用于「下载失败」后手动重试） */
   retryDownload(messageId: number): Promise<{ ok: boolean; message?: string }>
   /** 重试指定邮件的失败投递（deliveryId 省略=全部失败项） */

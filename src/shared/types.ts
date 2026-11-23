@@ -139,7 +139,15 @@ export interface RuleMatch {
 // ---------------------------------------------------------------------------
 // 邮件 / 附件 / 投递
 // ---------------------------------------------------------------------------
-export type MessageStatus = 'ignored_no_keyword' | 'ignored_type' | 'queued' | 'partial' | 'done' | 'failed'
+export type MessageStatus =
+  | 'ignored_no_keyword'
+  | 'ignored_type'
+  /** 超大附件/网盘链接邮件：邮件里只有下载链接，需用户手动下载后归档 */
+  | 'manual_needed'
+  | 'queued'
+  | 'partial'
+  | 'done'
+  | 'failed'
 export type ReplyStatus = 'disabled' | 'pending' | 'suppressed' | 'sent' | 'failed'
 export type DeliveryState = 'pending' | 'copying' | 'done' | 'retry_wait' | 'failed' | 'skipped'
 
@@ -174,6 +182,8 @@ export interface RecordRow {
   status: MessageStatus
   replyStatus: ReplyStatus
   error: string | null
+  /** 邮件正文里提取到的下载链接（超大附件/网盘） */
+  links: string[]
   attachments: Array<{
     id: number
     filename: string
@@ -314,6 +324,8 @@ export interface Settings {
   downloadAttempts: number
   /** 单个附件下载超时（秒），大附件/弱网可调到 1800 */
   downloadTimeoutSec: number
+  /** ZIP/RAR 落盘后自动解压到同一文件夹（保留压缩包） */
+  extractArchives: boolean
   /** 网络代理（国内访问 Gmail 必须；默认跟随系统） */
   proxy: ProxySettings
   /** 回信用哪个账户发（null = 谁收到就用谁发） */

@@ -12,6 +12,7 @@ import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { simpleParser } from 'mailparser'
+import AdmZip from 'adm-zip'
 import { SCHEMA } from '../src/main/schema.ts'
 import * as repos from '../src/main/repos.ts'
 import { PLAIN_CODEC } from '../src/main/repos.ts'
@@ -323,6 +324,119 @@ try {
     'IDLE 自动收信'
   )
   ok('IDLE 事件触发自动收信（未手动 checkNow）', idleProcessed)
+
+  // -------------------------------------------------------------------------
+  // 压缩包自动解压（ZIP 落盘后解到同一文件夹，不建子文件夹）
+  // -------------------------------------------------------------------------
+  console.log('ZIP 自动解压:')
+  const zipBuf = (() => {
+    const z = new AdmZip()
+    z.addFile('图稿/手机壳-正面.tif', Buffer.from('TIF-DATA'))
+    z.addFile('说明.txt', Buffer.from('hello'))
+    return z.toBuffer()
+  })()
+  await backend.scheduler.checkNow()
+  const uidBeforeZip = repos.getAccount(account.id)!.lastUid
+  server.imap.appendMessage('INBOX', [], false, new Uint8Array(mimeFor({
+    subject: '原图+卡套 ZIP解压测试 POD_ORDER_88888',
+    from: { name: 'Zip Sender', address: 'zip@inkpressed.co' },
+    fileName: 'POD_ORDER_88888.zip',
+    contentBuffer: zipBuf,
+    date: new Date()
+  })))
+  await backend.scheduler.checkNow()
+  const zipDone = await waitFor(
+    () => readdirSync(prodDir).some((f) => f.startsWith('POD_ORDER_88888')),
+    45_000,
+    'ZIP 落盘'
+  )
+  ok('ZIP 已落盘（保留原压缩包）', zipDone)
+  const zipExtracted = await waitFor(
+    () => existsSync(join(prodDir, '图稿', '手机壳-正面.tif')) && existsSync(join(prodDir, '说明.txt')),
+    30_000,
+    'ZIP 解压到生产目录'
+  )
+  ok('ZIP 解压到目标文件夹（不新建子文件夹）', zipExtracted)
+  ok('没有为压缩包新建同名子文件夹', !existsSync(join(prodDir, 'POD_ORDER_88888')))
+  ok('解压出的中文文件名正确', readFileSync(join(prodDir, '说明.txt'), 'utf8') === 'hello')
+
+  // -------------------------------------------------------------------------
+  // 超大附件（邮件里只有网盘/中转站链接，没有附件）→ manual_needed + 手动归档
+  // -------------------------------------------------------------------------
+  console.log('超大附件链接邮件:')
+  server.imap.appendMessage('INBOX', [], false, new Uint8Array(mimeFor({
+    subject: '原图+卡套 超大附件 POD_ORDER_77777',
+    from: { name: 'Big Sender', address: 'big@inkpressed.co' },
+    fileName: 'ignored.zip',
+    noAttachment: true,
+    html: '<p>文件较大，请点击下载：</p><a href="https://mail.qq.com/cgi-bin/ftnEx?t=abc123">下载超大附件</a>',
+    date: new Date()
+  })))
+  await backend.scheduler.checkNow()
+  const manualRec = await waitFor(
+    () => repos.listRecords({ page: 1, pageSize: 20 }).rows.some((r) => r.subject.includes('超大附件')),
+    30_000,
+    '超大附件邮件入库'
+  )
+  ok('超大附件邮件已入库', manualRec)
+  const mrec = repos.listRecords({ page: 1, pageSize: 20 }).rows.find((r) => r.subject.includes('超大附件'))!
+  eq('状态=manual_needed', mrec.status, 'manual_needed')
+  ok('保存了下载链接', mrec.links.length > 0 && mrec.links[0].includes('mail.qq.com'))
+
+  // 模拟用户把文件下载好 → 调 archiveManualFiles 归档
+  const manualZipDir = join(root, 'manual-download')
+  mkdirSync(manualZipDir, { recursive: true })
+  const manualZip = join(manualZipDir, 'POD_ORDER_77777.zip')
+  const z3 = new AdmZip(); z3.addFile('超大附件内容.txt', Buffer.from('manual')); z3.writeZip(manualZip)
+  const archived = await backend.archiveManualFiles(mrec.id, [manualZip])
+  ok('手动归档成功', archived.ok && (archived.archived ?? 0) >= 1)
+  ok('归档后文件出现在目标目录', readdirSync(prodDir).some((f) => f.startsWith('POD_ORDER_77777')))
+  ok('手动归档后自动解压', existsSync(join(prodDir, '超大附件内容.txt')))
+  const afterManual = repos.listRecords({ page: 1, pageSize: 20 }).rows.find((r) => r.id === mrec.id)!
+  eq('归档后状态=done', afterManual.status, 'done')
+
+  // -------------------------------------------------------------------------
+  // 规则类型白名单没勾 ZIP 时：仍按默认类型归档（不丢客户图稿）
+  // -------------------------------------------------------------------------
+  console.log('规则类型未勾选 ZIP 时的兜底:')
+  const oldTypes = repos.listRules().find((r) => r.keyword === '原图+卡套')!.fileTypes
+  repos.updateRule(repos.listRules().find((r) => r.keyword === '原图+卡套')!.id, {
+    keyword: '原图+卡套',
+    enabled: true,
+    scope: 'subject',
+    mode: 'exact',
+    priority: 20,
+    fileTypes: ['tif'],
+    autoReply: true,
+    targets: [{ path: prodDir, required: true }]
+  } as never)
+  const zip2 = (() => { const z = new AdmZip(); z.addFile('兜底.txt', Buffer.from('fallback')); return z.toBuffer() })()
+  server.imap.appendMessage('INBOX', [], false, new Uint8Array(mimeFor({
+    subject: '原图+卡套 类型未勾选测试 POD_ORDER_99999',
+    from: { name: 'Fallback', address: 'fallback@inkpressed.co' },
+    fileName: 'POD_ORDER_99999.zip',
+    contentBuffer: zip2,
+    date: new Date()
+  })))
+  await backend.scheduler.checkNow()
+  const fallbackDone = await waitFor(
+    () => readdirSync(prodDir).some((f) => f.startsWith('POD_ORDER_99999')),
+    45_000,
+    '白名单未勾 ZIP 仍归档'
+  )
+  ok('规则没勾 ZIP，ZIP 仍被归档（不丢件）', fallbackDone)
+  const fbRec = repos.listRecords({ page: 1, pageSize: 20 }).rows.find((r) => r.subject.includes('类型未勾选测试'))
+  eq('状态不是类型不符', fbRec?.status === 'ignored_type', false)
+  ok(
+    '弹出「已按默认类型归档」警告',
+    events.some((e) => e.type === 'toast' && e.level === 'warn' && e.title.includes('默认类型'))
+  )
+  // 还原规则类型，避免影响后续测试
+  repos.updateRule(repos.listRules().find((r) => r.keyword === '原图+卡套')!.id, {
+    keyword: '原图+卡套', enabled: true, scope: 'subject', mode: 'exact', priority: 20,
+    fileTypes: oldTypes, autoReply: true,
+    targets: [{ path: prodDir, required: true }]
+  } as never)
 
   // -------------------------------------------------------------------------
   // 下载进度 + 手动重试下载（大附件 / 弱网）

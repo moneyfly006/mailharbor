@@ -62,7 +62,7 @@ export function Records(): JSX.Element {
   const [retrying, setRetrying] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   // 弱网/大附件：下载超时与自动重试次数（存到设置）
-  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number } | null>(null)
+  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number; extract: boolean } | null>(null)
   const [dlPanelOpen, setDlPanelOpen] = useState(false)
   const [bulkRetrying, setBulkRetrying] = useState(false)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -70,15 +70,26 @@ export function Records(): JSX.Element {
   useEffect(() => {
     void api.settings
       .get()
-      .then((s) => setDlSettings({ timeoutSec: Number(s.downloadTimeoutSec ?? 900), attempts: Number(s.downloadAttempts ?? 3) }))
-      .catch(() => setDlSettings({ timeoutSec: 900, attempts: 3 }))
+      .then((s) =>
+        setDlSettings({
+          timeoutSec: Number(s.downloadTimeoutSec ?? 900),
+          attempts: Number(s.downloadAttempts ?? 3),
+          extract: s.extractArchives !== false
+        })
+      )
+      .catch(() => setDlSettings({ timeoutSec: 900, attempts: 3, extract: true }))
   }, [api])
 
-  const saveDlSettings = async (next: { timeoutSec: number; attempts: number }): Promise<void> => {
+  const saveDlSettings = async (next: { timeoutSec: number; attempts: number; extract: boolean }): Promise<void> => {
     setDlSettings(next)
     try {
       const s = await api.settings.get()
-      await api.settings.save({ ...s, downloadTimeoutSec: next.timeoutSec, downloadAttempts: next.attempts })
+      await api.settings.save({
+        ...s,
+        downloadTimeoutSec: next.timeoutSec,
+        downloadAttempts: next.attempts,
+        extractArchives: next.extract
+      })
       pushToast('success', '下载设置已保存', `超时 ${Math.round(next.timeoutSec / 60)} 分钟 · 自动重试 ${next.attempts} 次`)
     } catch (e) {
       pushToast('error', '保存失败', errMsg(e))
@@ -310,6 +321,18 @@ export function Records(): JSX.Element {
               <option value={2}>2 次</option>
               <option value={3}>3 次（推荐）</option>
               <option value={5}>5 次</option>
+            </select>
+          </div>
+          <div className="dls-item">
+            <span className="dls-lbl">自动解压 ZIP/RAR</span>
+            <select
+              className="dls-select"
+              value={dlSettings.extract ? 'on' : 'off'}
+              aria-label="压缩包自动解压"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, extract: e.target.value === 'on' })}
+            >
+              <option value="on">解压到目标文件夹</option>
+              <option value="off">只存压缩包，不解压</option>
             </select>
           </div>
           <div className="dls-hint">
@@ -565,6 +588,54 @@ export function Records(): JSX.Element {
                               重试 {primaryFail.drive}
                             </Button>
                           ) : null}
+                          {row.status === 'manual_needed' ? (
+                            <>
+                              {row.links.length > 0 ? (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  icon="external"
+                                  title={row.links[0]}
+                                  onClick={() =>
+                                    void api.records.openLink(row.links[0]).then((r) => {
+                                      if (!r.ok) pushToast('warn', '打开链接失败', r.message ?? '请手动复制链接')
+                                    })
+                                  }
+                                >
+                                  打开下载链接
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                icon="download"
+                                title="从超大附件/网盘下载好后，选择文件归档到规则路径"
+                                loading={retrying === `${row.id}-manual`}
+                                onClick={() => {
+                                  setRetrying(`${row.id}-manual`)
+                                  void api.records
+                                    .archiveManual(row.id)
+                                    .then((r) => {
+                                      if (r.ok) {
+                                        pushToast(
+                                          'success',
+                                          '已归档',
+                                          `已复制 ${r.archived ?? 0} 份${r.extracted ? `，解压 ${r.extracted} 个文件` : ''}`
+                                        )
+                                        reload()
+                                        refreshDashboard()
+                                      } else if (r.message !== '已取消') {
+                                        pushToast('warn', '归档未完成', r.message ?? '请重试')
+                                      }
+                                    })
+                                    .catch((e) => pushToast('error', '归档失败', errMsg(e)))
+                                    .finally(() => setRetrying(null))
+                                }}
+                              >
+                                选择文件归档
+                              </Button>
+                            </>
+                          ) : null}
                           {/* 下载阶段就失败（大附件/弱网超时）：重新拉取整封邮件 */}
                           {!primaryFail && row.status === 'failed' ? (
                             <Button
@@ -592,6 +663,33 @@ export function Records(): JSX.Element {
                             >
                               <Icon name="folder" size={14} />
                             </button>
+                          ) : null}
+                          {row.status === 'ignored_type' || row.status === 'ignored_no_keyword' ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              icon="refresh"
+                              title="规则改过 / 软件升级后，重新识别这封邮件"
+                              loading={retrying === `${row.id}-reprocess`}
+                              onClick={() => {
+                                setRetrying(`${row.id}-reprocess`)
+                                void api.records
+                                  .reprocess(row.id)
+                                  .then((r) => {
+                                    if (r.ok) {
+                                      pushToast('success', '已重新识别', '请看状态是否更新为已归档')
+                                      reload()
+                                      refreshDashboard()
+                                    } else {
+                                      pushToast('warn', '重新识别失败', r.message ?? '请稍后再试')
+                                    }
+                                  })
+                                  .catch((e) => pushToast('error', '重新识别失败', errMsg(e)))
+                                  .finally(() => setRetrying(null))
+                              }}
+                            >
+                              重新识别
+                            </Button>
                           ) : null}
                           {row.matchedRuleId == null ? (
                             <button

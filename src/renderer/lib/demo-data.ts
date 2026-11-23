@@ -506,6 +506,7 @@ function buildRecord(spec: RecordSpec, id: number, receivedAt: number): RecordRo
     status: spec.status,
     replyStatus: spec.reply,
     error: null,
+    links: [],
     attachments: [attachment]
   }
 }
@@ -734,6 +735,7 @@ export const DEMO_SETTINGS: Settings = {
   retryMaxAttempts: 3,
   downloadAttempts: 3,
   downloadTimeoutSec: 900,
+  extractArchives: true,
   multiRuleStrategy: 'all'
 }
 

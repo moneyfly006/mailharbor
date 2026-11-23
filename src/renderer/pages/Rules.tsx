@@ -29,7 +29,7 @@ import { messageStatusMeta, modeLabel, scopeLabel } from '../lib/status'
 import { useApp } from '../state/app-state'
 import '../styles/screens/rules.css'
 
-const ALL_FILE_TYPES = ['zip', 'rar', 'tif', 'tiff', 'jpg', 'png', 'pdf']
+const ALL_FILE_TYPES = ['zip', 'rar', '7z', 'tar', 'tar.gz', 'tgz', 'gz', 'bz2', 'xz', 'tif', 'tiff', 'jpg', 'png', 'pdf']
 
 const PRESET_RULES: Array<{ keyword: string; path: string; required: boolean }> = [
   { keyword: '原图+手机壳', path: 'D:\\POD\\生产\\手机壳', required: true },

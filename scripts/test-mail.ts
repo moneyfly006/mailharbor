@@ -14,6 +14,13 @@ import {
 import { classifyMailError, FIX_HINTS, errDetail } from '../src/main/providers/errors.ts'
 import { redact } from '../src/main/log.ts'
 
+// ---------------------------------------------------------------------------
+// 附件识别：Content-Disposition: inline 但有文件名，也要当附件（QQ/转发邮件常见）
+// ---------------------------------------------------------------------------
+function struct(over: Record<string, unknown>): any {
+  return { type: 'application/octet-stream', part: '2', size: 1024, ...over }
+}
+
 let pass = 0
 let fail = 0
 function eq(name: string, got: unknown, want: unknown): void {
@@ -199,6 +206,20 @@ try {
 }
 eq('sendReply 失败有错误码', typeof sendErr.code, 'string')
 eq('sendReply 失败中文提示', /[\u4e00-\u9fff]/.test(sendErr.message ?? ''), true)
+
+// 附件识别：inline vs attachment vs 正文
+{
+  const inlineNamed = struct({ disposition: 'inline', dispositionParameters: { filename: '1.rar' } })
+  const attachNamed = struct({ disposition: 'attachment', dispositionParameters: { filename: '2 (2).zip' } })
+  const inlineLogo = struct({ type: 'image/png', disposition: 'inline', dispositionParameters: { filename: 'image001.png' } })
+  const textPart = struct({ type: 'text/plain', part: '1' })
+  const root = { type: 'multipart/mixed', childNodes: [textPart, inlineNamed, attachNamed, inlineLogo] } as any
+  const parts = extractAttachments(root)
+  eq('inline 带文件名的 .rar 也算附件', parts.some((p) => p.filename === '1.rar'), true)
+  eq('attachment 的 zip 正常识别', parts.some((p) => p.filename === '2 (2).zip'), true)
+  eq('正文 text/plain 不算附件', parts.some((p) => p.partId === '1'), false)
+  eq('inline 签名小图被跳过', parts.some((p) => p.filename === 'image001.png'), false)
+}
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail === 0 ? 0 : 1)

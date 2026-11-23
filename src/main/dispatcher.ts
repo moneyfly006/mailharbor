@@ -11,12 +11,13 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { readdir, rm, stat } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import type { MainEvent } from '@shared/types'
 import * as repos from './repos'
 import type { DeliveryRow } from './repos'
 import { copyIntoDir, diskFree, pathExists, sanitizeFilename } from './file-writer'
 import { createLogger, type Logger } from './log'
+import { extractArchiveTo, isArchiveFile } from './archive'
 
 export type Emit = (e: MainEvent) => void
 
@@ -223,6 +224,34 @@ export class Dispatcher {
         sha256: attachment.sha256
       })
       this.log.info(`已落盘 ${copied.savedPath}`)
+
+      // 压缩包：解压到当前文件夹（不新建子文件夹），保留原压缩包
+      if (this.deps.getSetting<boolean>('extractArchives') !== false && isArchiveFile(copied.savedName)) {
+        try {
+          const res = await extractArchiveTo(copied.savedPath, dirname(copied.savedPath))
+          if (res) {
+            if (res.errors.length > 0) {
+              this.log.warn(`解压部分失败 ${copied.savedName}：${res.errors.slice(0, 3).join('；')}`)
+            }
+            this.log.info(`已解压 ${copied.savedName}：${res.extracted} 个文件${res.skipped ? `（跳过 ${res.skipped}）` : ''}`)
+            this.deps.emit({
+              type: 'toast',
+              level: res.errors.length ? 'warn' : 'success',
+              title: `已解压 ${res.extracted} 个文件`,
+              body: `${copied.savedName} → ${dirname(copied.savedPath)}`
+            })
+          }
+        } catch (e) {
+          this.log.error(`解压失败 ${copied.savedName}`, e instanceof Error ? e.message : String(e))
+          this.deps.emit({
+            type: 'toast',
+            level: 'warn',
+            title: '压缩包已保存，但解压失败',
+            body: `${copied.savedName}：${e instanceof Error ? e.message : String(e)}`
+          })
+        }
+      }
+
       this.afterDelivery(row, 'delivery:changed')
       this.deps.emit({ type: 'dashboard:changed' })
       return

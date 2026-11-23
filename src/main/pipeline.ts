@@ -7,12 +7,39 @@
 import type { Account, MainEvent, MessageStatus, ReplyStatus, Rule } from '@shared/types'
 import * as repos from './repos'
 import type { AttachmentRow, MessageRow } from './repos'
-import { isAllowedAttachment, matchRules } from './rule-engine'
+import { BUSINESS_DEFAULT_TYPES, isAllowedAttachment, matchRules } from './rule-engine'
 import { pathExists, sanitizeFilename } from './file-writer'
 import type { InboundAttachment, InboundMessage } from './providers/imap'
 import { createLogger, type Logger } from './log'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/** 常见的「超大附件 / 网盘」下载链接（这些链接必须人工登录/点击下载，IMAP 拿不到文件） */
+const BIG_LINK_PATTERNS = [
+  /mail\.qq\.com\/cgi-bin/i,
+  /wx\.mail\.qq\.com/i,
+  /ftnEx/i,
+  /weiyun\.com/i,
+  /pan\.baidu\.com/i,
+  /yun\.baidu\.com/i,
+  /189\.cn\/t\//i,
+  /cloud\.189\.cn/i,
+  /alipan\.com/i,
+  /aliyundrive\.com/i,
+  /drive\.google\.com/i,
+  /dropbox\.com/i,
+  /1drv\.ms/i,
+  /onedrive\.live\.com/i,
+  /sharepoint\.com/i
+]
+
+export function isBigAttachmentLink(url: string): boolean {
+  return BIG_LINK_PATTERNS.some((re) => re.test(url))
+}
+
+export function isBigAttachmentMail(links: string[]): boolean {
+  return links.some((l) => isBigAttachmentLink(l))
+}
 import { join } from 'node:path'
 
 export type Emit = (e: MainEvent) => void
@@ -54,7 +81,7 @@ export interface ProcessOutcome {
   skipped: boolean
 }
 
-export const DEFAULT_FALLBACK_TYPES = ['zip', 'rar', 'tif', 'tiff']
+export const DEFAULT_FALLBACK_TYPES = ['zip', 'rar', '7z', 'tar', 'tif', 'tiff']
 
 export class MailPipeline {
   private deps: PipelineDeps
@@ -108,9 +135,29 @@ export class MailPipeline {
       fromAddr: msg.fromAddr,
       fromName: msg.fromName,
       receivedAt: msg.receivedAt,
-      status: 'queued'
+      status: 'queued',
+      links: msg.bodyLinks.length > 0 ? msg.bodyLinks : null
     })
     const messageId = up.id
+
+    // 超大附件 / 网盘链接邮件：邮件里没有真实附件，只有下载链接 → 标为「待手动下载」
+    if (msg.parts.length === 0 && hitRules.length > 0 && isBigAttachmentMail(msg.bodyLinks)) {
+      repos.updateMessageMatch(messageId, {
+        matchedRuleId: hitRules[0]!.rule.id,
+        matchedKeyword: hitRules[0]!.rule.keyword,
+        matchSource: hitRules[0]!.hit.source
+      })
+      repos.updateMessageStatus(
+        messageId,
+        'manual_needed',
+        '这是「超大附件 / 文件中转站 / 网盘链接」邮件：文件不在邮件里，需要点开链接手动下载。下载后点「选择已下载的文件归档」，软件会复制到规则路径并解压，然后自动回信。'
+      )
+      repos.updateMessageReplyStatus(messageId, 'disabled', '等待手动下载归档后再回信')
+      this.log.info(`超大附件邮件：${msg.subject}（正文链接 ${msg.bodyLinks.length} 个）→ manual_needed`)
+      this.emitRecord(messageId)
+      return fallbackOutcome(messageId, 'manual_needed')
+    }
+
 
     // ---------------- 无命中 ----------------
     if (hitRules.length === 0) {
@@ -148,8 +195,22 @@ export class MailPipeline {
     }
 
     // ---------------- 附件类型白名单 ----------------
+    // 每条命中规则先看自己的白名单；若该规则一个附件都没覆盖（老规则没勾 ZIP/RAR 等），
+    // 则退化为「业务默认类型」——宁可归档也不要漏掉客户的图稿，并在记录里提示更新规则。
+    const effectiveTypes = new Map<number, string[]>()
+    let usedFallbackTypes = false
+    for (const { rule } of hitRules) {
+      const matched = msg.parts.some((p) => isAllowedAttachment(p.filename, p.mimeType, rule.fileTypes))
+      if (matched || msg.parts.length === 0) {
+        effectiveTypes.set(rule.id, rule.fileTypes.length > 0 ? rule.fileTypes : BUSINESS_DEFAULT_TYPES)
+      } else {
+        effectiveTypes.set(rule.id, BUSINESS_DEFAULT_TYPES)
+        usedFallbackTypes = true
+      }
+    }
+    const typesOf = (ruleId: number): string[] => effectiveTypes.get(ruleId) ?? BUSINESS_DEFAULT_TYPES
     const allowedParts = msg.parts.filter((p) =>
-      hitRules.some(({ rule }) => isAllowedAttachment(p.filename, p.mimeType, rule.fileTypes))
+      hitRules.some(({ rule }) => isAllowedAttachment(p.filename, p.mimeType, typesOf(rule.id)))
     )
     if (allowedParts.length === 0) {
       repos.updateMessageMatch(messageId, {
@@ -175,7 +236,9 @@ export class MailPipeline {
     // ---------------- 生成 deliveries（规则 × target × 附件） ----------------
     const items: Array<{ messageId: number; attachmentId: number; targetId: number; targetPath: string; required: boolean }> = []
     for (const { rule } of hitRules) {
-      const ruleAttachments = downloaded.filter((d) => isAllowedAttachment(d.part.filename, d.part.mimeType, rule.fileTypes))
+      const ruleAttachments = downloaded.filter((d) =>
+        isAllowedAttachment(d.part.filename, d.part.mimeType, typesOf(rule.id))
+      )
       if (ruleAttachments.length === 0) continue
       for (const target of rule.targets) {
         if (!target.enabled) continue
@@ -213,8 +276,22 @@ export class MailPipeline {
     }
     const replyStatus = this.initialReplyStatus(account, msg, hitRules.map((h) => h.rule))
     repos.updateMessageReplyStatus(messageId, replyStatus)
-    repos.updateMessageStatus(messageId, 'queued')
+    repos.updateMessageStatus(
+      messageId,
+      'queued',
+      usedFallbackTypes
+        ? '规则里没勾选实际附件类型（如 ZIP/RAR），本次已按默认类型归档；建议到「触发规则」把压缩包类型勾上'
+        : null
+    )
 
+    if (usedFallbackTypes) {
+      this.deps.emit({
+        type: 'toast',
+        level: 'warn',
+        title: '已按默认类型归档（规则未勾选该类型）',
+        body: '这次收到的附件类型（如 ZIP/RAR）不在规则白名单里，已按默认类型归档；建议到「触发规则」把压缩包类型勾上。'
+      })
+    }
     this.log.info(
       `命中 ${hitRules.map((h) => h.rule.keyword).join('、')}：邮件 #${messageId}，附件 ${downloaded.length} 个，投递 ${items.length} 条`
     )

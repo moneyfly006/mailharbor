@@ -161,6 +161,7 @@ export interface MessageRow {
   status: MessageStatus
   reply_status: ReplyStatus
   error: string | null
+  links: string | null
   created_at: number
   updated_at: number
 }
@@ -691,7 +692,7 @@ function mapRule(r: RuleRow): Rule {
     scope: r.scope,
     mode: r.mode,
     priority: r.priority,
-    fileTypes: safeJsonArray(r.file_types, ['zip', 'rar', 'tif', 'tiff']),
+    fileTypes: safeJsonArray(r.file_types, ['zip', 'rar', '7z', 'tar', 'tif', 'tiff']),
     autoReply: bool(r.auto_reply),
     hitMessages: r.hit_messages,
     hitFiles: r.hit_files,
@@ -884,6 +885,7 @@ export interface UpsertMessageInput {
   status?: MessageStatus
   replyStatus?: ReplyStatus
   error?: string | null
+  links?: string[] | null
 }
 
 /** 幂等 upsert：唯一键 (account_id,imap_uid)。返回 id 与是否新插入 */
@@ -896,6 +898,7 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
   if (existing) {
     d.prepare(
       `UPDATE messages SET
+         links=COALESCE(?, links),
          provider_message_id=COALESCE(?, provider_message_id),
          thread_key=COALESCE(?, thread_key),
          rfc_message_id=COALESCE(?, rfc_message_id),
@@ -906,6 +909,7 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
          updated_at=?
        WHERE id=?`
     ).run(
+      input.links ? JSON.stringify(input.links) : null,
       input.providerMessageId ?? null,
       input.threadKey ?? null,
       input.rfcMessageId ?? null,
@@ -922,8 +926,8 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
     .prepare(
       `INSERT INTO messages(
          account_id,imap_uid,provider_message_id,thread_key,rfc_message_id,subject,from_addr,from_name,
-         received_at,matched_rule_id,matched_keyword,match_source,status,reply_status,error,created_at,updated_at
-       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         received_at,matched_rule_id,matched_keyword,match_source,status,reply_status,error,links,created_at,updated_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     .run(
       input.accountId,
@@ -941,6 +945,7 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
       input.status ?? 'queued',
       input.replyStatus ?? 'pending',
       input.error ?? null,
+      input.links ? JSON.stringify(input.links) : null,
       ts,
       ts
     )
@@ -1421,6 +1426,7 @@ function toRecordRow(m: MessageRow, accountEmail: string, attachments: Attachmen
     status: m.status,
     replyStatus: m.reply_status,
     error: m.error,
+    links: safeJsonArray(m.links ?? null, []) as string[],
     attachments: attachments.map((a) => ({
       id: a.id,
       filename: a.filename,
@@ -1508,6 +1514,7 @@ function csvCell(v: unknown): string {
 const STATUS_ZH: Record<MessageStatus, string> = {
   ignored_no_keyword: '未命中关键词',
   ignored_type: '附件类型不符',
+  manual_needed: '超大附件·待手动下载',
   queued: '处理中',
   partial: '部分成功·待重试',
   done: '已完成',

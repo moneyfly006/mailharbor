@@ -25,6 +25,9 @@ export const IPC = {
   recordsList: 'records:list',
   recordsRetry: 'records:retry',
   recordsRetryDownload: 'records:retry-download',
+  recordsReprocess: 'records:reprocess',
+  recordsOpenLink: 'records:open-link',
+  recordsArchiveManual: 'records:archive-manual',
   recordsOpenFolder: 'records:open-folder',
   recordsExport: 'records:export',
   recordsClear: 'records:clear',
@@ -74,6 +77,14 @@ export interface Api {
     retry(messageId: number, deliveryId?: number): Promise<void>
     /** 重新下载并归档（下载失败后重试用） */
     retryDownload(messageId: number): Promise<{ ok: boolean; message?: string }>
+    /** 重新识别（用于修改规则/升级后重扫单封邮件） */
+    reprocess(messageId: number): Promise<{ ok: boolean; message?: string }>
+    /** 用系统浏览器打开超大附件/网盘链接 */
+    openLink(url: string): Promise<{ ok: boolean; message?: string }>
+    /** 选择手动下载好的文件并归档到规则路径 */
+    archiveManual(
+      messageId: number
+    ): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }>
     openFolder(messageId: number, deliveryId?: number): Promise<void>
     exportCsv(q: ListRecordsQuery): Promise<{ path: string } | null>
     clear(): Promise<void>

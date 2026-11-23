@@ -129,6 +129,12 @@ export function matchRules(
 const MIME_OK: Record<string, string[]> = {
   zip: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream', 'multipart/x-zip'],
   rar: ['application/x-rar-compressed', 'application/vnd.rar', 'application/octet-stream', 'application/x-rar'],
+  '7z': ['application/x-7z-compressed', 'application/octet-stream'],
+  tar: ['application/x-tar', 'application/octet-stream'],
+  gz: ['application/gzip', 'application/x-gzip', 'application/octet-stream'],
+  tgz: ['application/gzip', 'application/x-gzip', 'application/octet-stream'],
+  bz2: ['application/x-bzip2', 'application/octet-stream'],
+  xz: ['application/x-xz', 'application/octet-stream'],
   tif: ['image/tiff', 'image/tif', 'application/octet-stream'],
   tiff: ['image/tiff', 'image/tif', 'application/octet-stream'],
   jpg: ['image/jpeg', 'image/pjpeg', 'application/octet-stream'],
@@ -144,8 +150,12 @@ export function extOf(filename: string): string {
   return i >= 0 ? filename.slice(i + 1).toLowerCase() : ''
 }
 
+export const BUSINESS_DEFAULT_TYPES = ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'tif', 'tiff', 'jpg', 'jpeg', 'png', 'pdf', 'psd', 'ai']
+
 export function isAllowedAttachment(filename: string, mimeType: string | undefined, fileTypes: string[]): boolean {
-  const allowed = fileTypes.map((t) => t.toLowerCase().replace(/^\./, ''))
+  // 规则没勾选任何类型时，视为"业务默认类型"，而不是拒绝一切（历史数据/误操作兜底）
+  const source = fileTypes && fileTypes.length > 0 ? fileTypes : BUSINESS_DEFAULT_TYPES
+  const allowed = source.map((t) => t.toLowerCase().replace(/^\./, ''))
   const ext = extOf(filename)
   if (ext && allowed.includes(ext)) return true
   // 无后缀（或后缀不在白名单）时按 MIME 兜底，但仍要求该 MIME 属于白名单内某类型

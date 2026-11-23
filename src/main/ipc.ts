@@ -189,6 +189,46 @@ export function registerIpc(context: IpcContext): void {
     }
   })
 
+  ipcMain.handle(IPC.recordsOpenLink, async (_e, rawUrl: string): Promise<{ ok: boolean; message?: string }> => {
+    const url = String(rawUrl ?? '')
+    if (!/^https?:\/\//i.test(url)) return { ok: false, message: '只允许打开 http(s) 链接' }
+    try {
+      await shell.openExternal(url)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
+  ipcMain.handle(
+    IPC.recordsArchiveManual,
+    async (_e, messageId: number): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }> => {
+      try {
+        const picked = await dialog.showOpenDialog({
+          title: '选择从超大附件/网盘下载好的文件',
+          properties: ['openFile', 'multiSelections'],
+          filters: [{ name: '压缩包/图稿', extensions: ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'tif', 'tiff', 'jpg', 'jpeg', 'png', 'pdf', 'psd', 'ai'] }]
+        })
+        if (picked.canceled || picked.filePaths.length === 0) return { ok: false, message: '已取消' }
+        const r = await requireBackend().archiveManualFiles(messageId, picked.filePaths)
+        ctx?.broadcast({ type: 'dashboard:changed' })
+        return r
+      } catch (e) {
+        return { ok: false, message: e instanceof Error ? e.message : String(e) }
+      }
+    }
+  )
+
+  ipcMain.handle(IPC.recordsReprocess, async (_e, messageId: number): Promise<{ ok: boolean; message?: string }> => {
+    try {
+      const r = await requireBackend().reprocessMessage(messageId)
+      ctx?.broadcast({ type: 'dashboard:changed' })
+      return r
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
   ipcMain.handle(IPC.recordsOpenFolder, async (_e, messageId: number, deliveryId?: number): Promise<void> => {
     const dir = repos.folderOfRecord(messageId, deliveryId)
     if (!dir) throw new Error('没有可打开的文件夹')

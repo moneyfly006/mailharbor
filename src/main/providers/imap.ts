@@ -107,6 +107,8 @@ export interface InboundMessage {
   fromName: string
   receivedAt: number
   bodyText: string
+  /** 正文里提取到的 http(s) 链接（超大附件/网盘下载地址） */
+  bodyLinks: string[]
   parts: InboundAttachment[]
   /** Auto-Submitted 头非空（自动回复/转发），回信时须跳过 */
   autoSubmitted: boolean
@@ -250,8 +252,24 @@ export function extractAttachments(
     if (!node || depth > maxDepth) return
     const isContainer = node.type.startsWith('multipart/') || node.type === 'message/rfc822'
     const rawName = node.dispositionParameters?.filename ?? node.parameters?.name
-    const isAttachment = node.disposition === 'attachment' || (!!rawName && node.disposition !== 'inline')
-    if (isAttachment && !isContainer) {
+    const type = (node.type ?? '').toLowerCase()
+    // 有些邮箱（QQ/企业邮箱转发、超大附件转普通附件）会把附件标成 Content-Disposition: inline，
+    // 甚至不写 disposition；只要"有文件名 + 不是正文文本 + 不是 multipart"，就按附件处理，
+    // 否则会把真有文件的邮件误判成"没有附件 / 类型不符"。
+    const hasFileExt = !!rawName && /\.[A-Za-z0-9]{1,8}$/.test(rawName)
+    // 签名档里的小图（inline image，通常 <200KB）不算附件；客户发的大图/TIF 仍算
+    const looksInlineImage =
+      type.startsWith('image/') &&
+      (node.size ?? 0) < 200 * 1024 &&
+      /\.(png|jpe?g|gif|bmp|webp)$/i.test(rawName ?? '')
+    const isAttachment =
+      !isContainer &&
+      !type.startsWith('text/') &&
+      (node.disposition === 'attachment' ||
+        (!!rawName && node.disposition !== 'inline') ||
+        (node.disposition === 'inline' && hasFileExt && !looksInlineImage) ||
+        (!node.disposition && hasFileExt))
+    if (isAttachment) {
       const decoded = decodeFilename(rawName) || `attachment-${out.length + 1}`
       out.push({
         partId: node.part ?? String(out.length + 1),
@@ -715,6 +733,7 @@ export class ImapSmtpProvider {
     const from = envelope.from?.[0]
     const receivedAt = toTime(meta.internalDate ?? envelope.date)
     const bodyText = await this.readBodyText(meta)
+    const bodyLinks = await this.readBodyLinks(meta)
     const parts = extractAttachments(meta.bodyStructure)
     return {
       uid: meta.uid,
@@ -726,8 +745,44 @@ export class ImapSmtpProvider {
       fromName: from?.name ?? '',
       receivedAt,
       bodyText,
+      bodyLinks,
       parts,
       autoSubmitted
+    }
+  }
+
+  /** 从 html/text 正文里提取 http(s) 链接（用于识别「超大附件/网盘」邮件） */
+  private async readBodyLinks(meta: FetchMessageObject): Promise<string[]> {
+    const client = this.client
+    if (!client) return []
+    const plain = findBodyPart(meta.bodyStructure, 'text/plain')
+    const html = findBodyPart(meta.bodyStructure, 'text/html')
+    const part = html ?? plain
+    if (!part?.part) return []
+    try {
+      const dl = await client.download(String(meta.uid), part.part, { uid: true, maxBytes: MAX_BODY_BYTES })
+      if (!dl.content) return []
+      const chunks: Buffer[] = []
+      let total = 0
+      for await (const chunk of dl.content) {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
+        chunks.push(buf)
+        total += buf.length
+        if (total >= MAX_BODY_BYTES) break
+      }
+      const raw = Buffer.concat(chunks).toString('utf8')
+      const text = part.type === 'text/html' ? raw.replace(/&amp;/gi, '&') : raw
+      const links: string[] = []
+      const re = /https?:\/\/[^\s<>"'）)】\]]+/gi
+      for (const m of text.matchAll(re)) {
+        const url = m[0].replace(/[.,;:]+$/, '')
+        if (!links.includes(url)) links.push(url)
+        if (links.length >= 12) break
+      }
+      return links
+    } catch (e) {
+      this.log.warn(`读取正文链接失败 UID=${meta.uid}`, e instanceof Error ? e.message : String(e))
+      return []
     }
   }
 

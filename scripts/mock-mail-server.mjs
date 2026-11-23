@@ -61,6 +61,24 @@ export function encodeParam(s) {
   return `filename*=UTF-8''${enc}`
 }
 
+function mimeOfName(name = '') {
+  const ext = String(name).toLowerCase().split('.').pop()
+  const map = {
+    zip: 'application/zip',
+    rar: 'application/x-rar-compressed',
+    '7z': 'application/x-7z-compressed',
+    tif: 'image/tiff',
+    tiff: 'image/tiff',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    pdf: 'application/pdf',
+    tar: 'application/x-tar',
+    gz: 'application/gzip'
+  }
+  return map[ext] ?? 'application/octet-stream'
+}
+
 export function mimeFor(m) {
   const boundary = '----=MH_' + Math.random().toString(36).slice(2)
   const from = m.from ? `${m.from.name} <${m.from.address}>` : MOCK.user
@@ -75,18 +93,20 @@ export function mimeFor(m) {
       `Content-Type: multipart/mixed; boundary="${boundary}"`,
       '',
       `--${boundary}`,
-      'Content-Type: text/plain; charset=utf-8',
+      `Content-Type: ${m.html ? 'text/html' : 'text/plain'}; charset=utf-8`,
       'Content-Transfer-Encoding: 8bit',
       '',
-      m.body ?? '定制需求：请按附件图稿生产，交期 12 月 5 日。',
+      m.html ?? m.body ?? '定制需求：请按附件图稿生产，交期 12 月 5 日。',
       '',
-      `--${boundary}`,
-      `Content-Type: application/octet-stream`,
-      `Content-Disposition: attachment; ${encodeParam(m.fileName)}`,
-      'Content-Transfer-Encoding: base64',
-            '',
-      Buffer.from(m.content ?? 'x').toString('base64'),
-      '',
+      ...(m.noAttachment ? [] : [
+        `--${boundary}`,
+        `Content-Type: ${mimeOfName(m.fileName)}`,
+        `Content-Disposition: attachment; ${encodeParam(m.fileName)}`,
+        'Content-Transfer-Encoding: base64',
+        '',
+        (m.contentBuffer ? Buffer.from(m.contentBuffer) : Buffer.from(m.content ?? 'x')).toString('base64'),
+        ''
+      ]),
       `--${boundary}--`,
       ''
     ].join('\r\n'),

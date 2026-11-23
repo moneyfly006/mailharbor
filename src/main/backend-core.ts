@@ -5,8 +5,10 @@
  * 假 Provider / 假 SMTP 发送函数，从而端到端验证「收信 → 匹配 → 下载 → 扇出 → 记录 → 回信」。
  */
 import { EventEmitter } from 'node:events'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, statSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { copyIntoDir } from './file-writer'
+import { extractArchiveTo, isArchiveFile } from './archive'
 import type { AccountInput, MainEvent, TestResult } from '@shared/types'
 import type { DB } from './db'
 import * as repos from './repos'
@@ -288,6 +290,89 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         emit({ type: 'dashboard:changed' })
         emit({ type: 'toast', level: 'success', title: '启动对账完成', body: `认领 ${r.adopted} · 重做 ${r.reset} · 清理临时文件 ${r.tmpCleaned}` })
       }
+    },
+    async archiveManualFiles(
+      messageId: number,
+      files: string[]
+    ): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }> {
+      const row = repos.getMessage(messageId)
+      if (!row) return { ok: false, message: '找不到这封邮件' }
+      const rule = row.matched_rule_id ? repos.getRule(row.matched_rule_id) : null
+      if (!rule) return { ok: false, message: '这封邮件没有匹配到规则，无法确定归档路径' }
+      const targets = rule.targets.filter((t) => t.enabled)
+      if (targets.length === 0) return { ok: false, message: '规则里没有启用的目标路径' }
+      if (files.length === 0) return { ok: false, message: '没有选择文件' }
+      const extract = deps.getSetting<boolean>('extractArchives') !== false
+      let archived = 0
+      let extracted = 0
+      const errors: string[] = []
+      for (const file of files) {
+        try {
+          const st = statSync(file)
+          const name = basename(file)
+          const att = repos.upsertAttachment(messageId, {
+            partId: `manual:${name}:${st.size}:${st.mtimeMs}`,
+            filename: name,
+            mimeType: null,
+            declaredSize: st.size
+          })
+          repos.setAttachmentDownloaded(att.id, { tmpPath: file, size: st.size, sha256: '' })
+          for (const target of targets) {
+            try {
+              const copied = await copyIntoDir(file, target.path, name)
+              const [delivery] = repos.createDeliveries([
+                { messageId, attachmentId: att.id, targetId: target.id, targetPath: target.path, required: target.required }
+              ])
+              if (delivery) {
+                repos.markDeliveryDone(delivery.id, {
+                  savedPath: copied.savedPath,
+                  savedName: copied.savedName,
+                  size: copied.size,
+                  sha256: ''
+                })
+              }
+              archived++
+              if (extract && isArchiveFile(name)) {
+                try {
+                  const res = await extractArchiveTo(copied.savedPath, dirname(copied.savedPath))
+                  extracted += res?.extracted ?? 0
+                } catch (e) {
+                  errors.push(`${name} 解压失败：${e instanceof Error ? e.message : String(e)}`)
+                }
+              }
+            } catch (e) {
+              errors.push(`${target.path} 写入失败：${e instanceof Error ? e.message : String(e)}`)
+            }
+          }
+        } catch (e) {
+          errors.push(`${file} 读取失败：${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+      if (archived > 0) {
+        repos.updateMessageStatus(messageId, archived > 0 ? 'done' : 'failed', errors.length ? errors.join('；') : null)
+        repos.updateMessageReplyStatus(messageId, 'pending', null)
+        emit({ type: 'delivery:changed', messageId })
+        emit({ type: 'dashboard:changed' })
+        if (rule.autoReply) {
+          try {
+            await replyService.maybeReply(messageId)
+          } catch {
+            /* 回信失败由 reply-service 记录 */
+          }
+        }
+      }
+      return {
+        ok: archived > 0,
+        archived,
+        extracted,
+        message: errors.length ? errors.slice(0, 3).join('；') : undefined
+      }
+    },
+    async reprocessMessage(messageId: number): Promise<{ ok: boolean; message?: string }> {
+      const row = repos.getMessage(messageId)
+      if (!row) return { ok: false, message: '找不到这封邮件' }
+      const r = await scheduler.reprocess(row.account_id, [row.imap_uid])
+      return { ok: r.processed > 0, message: r.processed > 0 ? undefined : '重新识别失败，请稍后再试' }
     },
     async retryDownload(messageId: number): Promise<{ ok: boolean; message?: string }> {
       const target = repos.resetMessageForDownloadRetry(messageId)

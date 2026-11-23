@@ -8,6 +8,11 @@ directories:
 
 files:
   - out/**
+
+# node-unrar-js 的 wasm 需要真实文件路径（asar 内无法 mmap）
+asarUnpack:
+  - node_modules/node-unrar-js/**
+  - node_modules/7zip-bin/**
   - resources/**
   - package.json
 

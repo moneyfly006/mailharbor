@@ -42,6 +42,10 @@ eq('tif 后缀', isAllowedAttachment('设计图.TIF', 'application/octet-stream'
 eq('rar 后缀', isAllowedAttachment('POD_原图.rar', 'application/octet-stream', ['zip','rar']), true)
 eq('rar MIME 兜底', isAllowedAttachment('无名文件', 'application/x-rar-compressed', ['rar']), true)
 eq('rar 未在白名单 → 按 MIME 拒绝', isAllowedAttachment('POD.rar', 'application/x-rar-compressed', ['zip']), false)
+// 规则没勾任何类型时按业务默认类型，而不是拒绝一切（历史数据兜底）
+eq('空类型 → 允许 zip', isAllowedAttachment('POD.zip', 'application/zip', []), true)
+eq('空类型 → 允许 rar', isAllowedAttachment('POD.rar', 'application/x-rar-compressed', []), true)
+eq('空类型 → 拒绝 exe', isAllowedAttachment('setup.exe', 'application/x-msdownload', []), false)
 eq('png 不在白名单', isAllowedAttachment('a.png', 'image/png', ['zip','tif']), false)
 eq('无后缀 MIME 兜底', isAllowedAttachment('noext', 'image/tiff', ['tif']), true)
 
