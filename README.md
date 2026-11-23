@@ -7,8 +7,8 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 最新版本 | v0.1.13（自动更新已启用） |
-| 安装包 | [MailHarbor-Setup-0.1.13.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
+| 最新版本 | v0.1.18（自动更新已启用） |
+| 安装包 | [MailHarbor-Setup-0.1.18.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
 | macOS | [dmg / zip](https://github.com/moneyfly006/mailharbor/releases/latest)（arm64 + x64） |
 | 设计说明书 | [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-Design-Spec.pdf)（6 屏高保真设计图） |
 | **配置说明书** | [docs/邮箱资料助手-配置说明书.pdf](docs/邮箱资料助手-配置说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-User-Manual.pdf)（安装→配邮箱→配规则→配回信→日常使用，21 页） |
@@ -17,6 +17,14 @@
 **安装路径可以自己选**：安装包是多步向导（不是一键静默装），会出现「选择安装位置」这一步，默认装在
 `%LOCALAPPDATA%\Programs\邮箱资料助手`（按当前用户安装，**不需要管理员权限**），你可以改成 `D:\软件\邮箱资料助手` 等任意目录。
 装完桌面会生成「**邮箱资料助手**」快捷方式（朱红信封图标），开始菜单同名入口；卸载时会保留邮件记录与配置。
+
+## 压缩包 / 超大附件 / 弱网（v0.1.18）
+
+- **压缩包自动解压**：ZIP / RAR / 7Z / TAR / TAR.GZ / TGZ / GZ / BZ2 / XZ → 解压到**当前目标文件夹**（不新建子文件夹），保留原包、重名自动编号、防路径穿越
+- **超大附件（QQ 中转站 / 网盘链接）**：自动识别为「待手动下载」→ 行内「打开下载链接」→ 下载后「选择文件归档」→ 自动复制到规则路径 + 解压 + 自动回信
+- **inline 附件**也能识别（QQ/转发邮件常见）
+- **规则类型漏勾**时按默认业务类型兜底，不再整封判「类型不符」；记录页可一键「重新识别」历史邮件
+- **弱网下载**：实时进度、自动重试 3 次、超时 15/30/60 分钟可调、失败行「重试下载」与批量重试
 
 ## 大附件 / 弱网（v0.1.12 起）
 
