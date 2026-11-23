@@ -27,6 +27,11 @@ export interface Backend {
   reconcile(): Promise<void> | void
   /** 用第一个启用账户的 SMTP 发一封测试信（自动回复页「发送测试信」用） */
   testReply(to: string): Promise<{ ok: boolean; message: string; providerMessageId?: string }>
+  /** 标题测试：用给定标题跑一遍当前规则，返回命中的规则与归一化结果（规则页调试用） */
+  testSubject(subject: string, body?: string): Promise<{
+    normalized: string
+    hits: Array<{ ruleId: number; keyword: string; source: 'subject' | 'body' }>
+  }>
   /** 超大附件：用户手动下载后，把选中的文件归档到规则路径（并解压） */
   archiveManualFiles(
     messageId: number,

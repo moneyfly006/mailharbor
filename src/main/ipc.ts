@@ -13,6 +13,9 @@ import type { Backend } from './services'
 import { getDb, getSetting, setSetting, DEFAULT_SETTINGS } from './db'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { isBigAttachmentLink } from './pipeline'
+import { downloadLinkedFile } from './link-download'
+import { openQqLogin } from './qq-web'
 
 export interface IpcContext {
   getBackend: () => Backend | null
@@ -26,6 +29,7 @@ export interface IpcContext {
 }
 
 let ctx: IpcContext | null = null
+const linkArchives = new Set<number>()
 
 function requireBackend(): Backend {
   const b = ctx?.getBackend()
@@ -115,6 +119,23 @@ export function registerIpc(context: IpcContext): void {
     } catch (e) { fail(e) }
   })
 
+  ipcMain.handle(IPC.accountQqLogin, async (event, id: number): Promise<{ ok: boolean; message?: string }> => {
+    const parent = context.getWindow()
+    if (!parent || event.sender !== parent.webContents || event.senderFrame !== parent.webContents.mainFrame) {
+      return { ok: false, message: '请从邮箱账户页打开 QQ 登录' }
+    }
+    if (!Number.isSafeInteger(id) || id <= 0 || repos.getAccount(id)?.preset !== 'qq') {
+      return { ok: false, message: '找不到 QQ 邮箱账户' }
+    }
+    try {
+      await openQqLogin(id, parent)
+      setSetting(`qqWebEnabled:${id}`, true)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'QQ 登录窗口打开失败' }
+    }
+  })
+
   ipcMain.handle(IPC.accountToggle, async (_e, id: number, enabled: boolean): Promise<Account> => {
     try {
       const acc = repos.setAccountEnabled(id, enabled)
@@ -189,9 +210,14 @@ export function registerIpc(context: IpcContext): void {
     }
   })
 
-  ipcMain.handle(IPC.recordsOpenLink, async (_e, rawUrl: string): Promise<{ ok: boolean; message?: string }> => {
-    const url = String(rawUrl ?? '')
-    if (!/^https?:\/\//i.test(url)) return { ok: false, message: '只允许打开 http(s) 链接' }
+  ipcMain.handle(IPC.rulesTestSubject, async (_e, subject: string, body?: string) => {
+    return requireBackend().testSubject(String(subject ?? ''), body)
+  })
+
+  ipcMain.handle(IPC.recordsOpenLink, async (_e, messageId: number): Promise<{ ok: boolean; message?: string }> => {
+    if (!Number.isSafeInteger(messageId) || messageId <= 0) return { ok: false, message: '无效的邮件记录' }
+    const url = repos.getRecordById(messageId)?.links.find(isBigAttachmentLink)
+    if (!url) return { ok: false, message: '找不到文件下载链接' }
     try {
       await shell.openExternal(url)
       return { ok: true }
@@ -201,8 +227,46 @@ export function registerIpc(context: IpcContext): void {
   })
 
   ipcMain.handle(
+    IPC.recordsDownloadLink,
+    async (event, messageId: number): ReturnType<Backend['archiveManualFiles']> => {
+      const window = context.getWindow()
+      if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) {
+        return { ok: false, message: '请从下载记录发起下载' }
+      }
+      if (!Number.isSafeInteger(messageId) || messageId <= 0) return { ok: false, message: '无效的邮件记录' }
+      const record = repos.getRecordById(messageId)
+      const url = record?.links.find(isBigAttachmentLink)
+      if (!record || record.status !== 'manual_needed' || !url) return { ok: false, message: '找不到待下载文件' }
+      if (linkArchives.has(messageId)) return { ok: false, message: '这封邮件正在下载或归档' }
+      linkArchives.add(messageId)
+      try {
+        const file = await downloadLinkedFile({
+          url,
+          parent: window,
+          accountId: record.accountId,
+          messageId,
+          onProgress: (progress) => context.broadcast({ type: 'download:progress', progress })
+        })
+        if (!file) return { ok: false, message: '已取消' }
+        const result = await requireBackend().archiveManualFiles(messageId, [file.path])
+        if (!result.ok) {
+          return { ...result, message: `${result.message ?? '归档未完成'}。原件已保存至系统下载目录的 MailHarbor 文件夹。` }
+        }
+        return result
+      } catch (e) {
+        return { ok: false, message: e instanceof Error ? e.message : String(e) }
+      } finally {
+        linkArchives.delete(messageId)
+      }
+    }
+  )
+
+  ipcMain.handle(
     IPC.recordsArchiveManual,
     async (_e, messageId: number): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }> => {
+      if (!Number.isSafeInteger(messageId) || messageId <= 0) return { ok: false, message: '无效的邮件记录' }
+      if (linkArchives.has(messageId)) return { ok: false, message: '这封邮件正在下载或归档' }
+      linkArchives.add(messageId)
       try {
         const picked = await dialog.showOpenDialog({
           title: '选择从超大附件/网盘下载好的文件',
@@ -215,6 +279,8 @@ export function registerIpc(context: IpcContext): void {
         return r
       } catch (e) {
         return { ok: false, message: e instanceof Error ? e.message : String(e) }
+      } finally {
+        linkArchives.delete(messageId)
       }
     }
   )

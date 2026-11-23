@@ -7,8 +7,8 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 最新版本 | v0.1.18（自动更新已启用） |
-| 安装包 | [MailHarbor-Setup-0.1.18.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
+| 最新版本 | v0.1.23（自动更新已启用） |
+| 安装包 | [MailHarbor-Setup-0.1.23.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
 | macOS | [dmg / zip](https://github.com/moneyfly006/mailharbor/releases/latest)（arm64 + x64） |
 | 设计说明书 | [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-Design-Spec.pdf)（6 屏高保真设计图） |
 | **配置说明书** | [docs/邮箱资料助手-配置说明书.pdf](docs/邮箱资料助手-配置说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-User-Manual.pdf)（安装→配邮箱→配规则→配回信→日常使用，21 页） |
@@ -17,6 +17,20 @@
 **安装路径可以自己选**：安装包是多步向导（不是一键静默装），会出现「选择安装位置」这一步，默认装在
 `%LOCALAPPDATA%\Programs\邮箱资料助手`（按当前用户安装，**不需要管理员权限**），你可以改成 `D:\软件\邮箱资料助手` 等任意目录。
 装完桌面会生成「**邮箱资料助手**」快捷方式（朱红信封图标），开始菜单同名入口；卸载时会保留邮件记录与配置。
+
+## 下载加速 / 垃圾邮件扫描（v0.1.23）
+
+| 能力 | 说明 |
+|---|---|
+| **垃圾邮件文件夹扫描** | Gmail 常把 QQ 发来的大附件判垃圾；开启后自动扫 `[Gmail]/垃圾邮件` / `Junk`，照样下载归档，记录标「垃圾箱」，且不自动回信（防止回垃圾邮件）。默认开启。 |
+| **分块大小可调** | 默认 2MB（可选 1/2/4/8/16）。IMAP 每次只回一块，块越小往返越多；64KB 时 Gmail 只有 ~13KB/s。 |
+| **多连接并行** | >6MB 自动切成 N 段，在 2–8 条连接上同时取（实测 4 连接约为单连接 2.3 倍）。 |
+| **非阻塞调度** | 一个大附件慢下载不再卡住其它账户/后续邮件（修掉「一直处理中、今天邮件不完整」）。 |
+| 进度/速度/看门狗 | 实时速度显示、60 秒无数据自动中断重试、启动恢复上次中断任务。 |
+
+**关于体积**：安装包约 111MB，其中 Electron/Chromium 运行时占 90% 以上（`邮箱资料助手.exe` 单文件约 238MB，压缩后 ~90MB）；
+业务代码（`app.asar`）仅 ~14MB。已做瘦身：只保留中英文语言包（原 55 种语言包 49MB → 2MB）、构建时裁掉 7zip 的其它平台二进制，
+安装包从 122MB 降到 111MB。再往下压需要换运行时（如 Tauri），工作量与风险都很大。
 
 ## 压缩包 / 超大附件 / 弱网（v0.1.18）
 

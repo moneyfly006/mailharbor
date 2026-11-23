@@ -507,6 +507,7 @@ function buildRecord(spec: RecordSpec, id: number, receivedAt: number): RecordRo
     replyStatus: spec.reply,
     error: null,
     links: [],
+    mailbox: 'INBOX',
     attachments: [attachment]
   }
 }
@@ -681,7 +682,23 @@ function makeRecords(): RecordRow[] {
   return rows.sort((a, b) => b.receivedAt - a.receivedAt)
 }
 
-export const DEMO_RECORDS: RecordRow[] = makeRecords()
+export const DEMO_RECORDS: RecordRow[] = (() => {
+  const rows = makeRecords()
+  // 演示一条「超大附件·待手动下载」，方便查看两个操作按钮的排版
+  const manual: RecordRow = {
+    ...rows[0]!,
+    id: 999,
+    subject: '原图+卡套 超大附件 POD_ORDER_77777',
+    fromAddr: '352275307@qq.com',
+    fromName: '斌',
+    status: 'manual_needed',
+    replyStatus: 'disabled',
+    links: ['https://mail.qq.com/cgi-bin/ftnEx?t=demo'],
+    error: '这是「超大附件 / 文件中转站 / 网盘链接」邮件：文件不在邮件里，需要点开链接手动下载。',
+    attachments: []
+  }
+  return [manual, ...rows]
+})()
 
 // ---------------------------------------------------------------------------
 // 设置（与 Settings 字段一一对应）
@@ -735,6 +752,11 @@ export const DEMO_SETTINGS: Settings = {
   retryMaxAttempts: 3,
   downloadAttempts: 3,
   downloadTimeoutSec: 900,
+  downloadChunkSizeMB: 2,
+  scanSpam: true,
+  parallelDownload: true,
+  parallelConnections: 4,
+  parallelThresholdMB: 6,
   extractArchives: true,
   multiRuleStrategy: 'all'
 }

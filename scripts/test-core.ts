@@ -1,4 +1,4 @@
-import { matchRules, stripSubjectPrefix, normalize, isAllowedAttachment } from '../src/main/rule-engine.ts'
+import { matchOne, matchRules, stripSubjectPrefix, normalize, isAllowedAttachment } from '../src/main/rule-engine.ts'
 import { decodeRfc2047, sanitizeFilename, uniqueNameInDir, copyIntoDir } from '../src/main/file-writer.ts'
 import { PRESETS } from '../src/shared/presets.ts'
 import { mkdtemp, writeFile } from 'node:fs/promises'
@@ -39,6 +39,17 @@ eq('normalize 全角', normalize('原图＋卡套（1）'), '原图+卡套(1)')
 console.log('attachment type:')
 eq('zip 后缀', isAllowedAttachment('POD_ORDER.zip', 'application/octet-stream', ['zip','tif']), true)
 eq('tif 后缀', isAllowedAttachment('设计图.TIF', 'application/octet-stream', ['zip','tif']), true)
+// 标题前带装饰/破折号也要命中（客户常见写法）
+{
+  const rule = { id: 1, keyword: '原图+手机壳', scope: 'subject' as const, mode: 'exact' as const }
+  eq('【原图+手机壳】命中', matchOne(rule, { subject: '【原图+手机壳】POD_ORDER_1' }) !== null, true)
+  eq('★原图+手机壳 命中', matchOne(rule, { subject: '★原图+手机壳 追加' }) !== null, true)
+  eq('原图-手机壳 命中（破折号）', matchOne(rule, { subject: '原图-手机壳 追加 2 款' }) !== null, true)
+  eq('原图—手机壳 命中（长破折号）', matchOne(rule, { subject: '原图—手机壳' }) !== null, true)
+  eq('FWD: 【原图+手机壳】(2) 命中', matchOne(rule, { subject: 'FWD: 【原图+手机壳】(2)' }) !== null, true)
+  eq('原图+手机壳盒 不命中', matchOne(rule, { subject: '原图+手机壳盒' }) === null, true)
+}
+
 eq('rar 后缀', isAllowedAttachment('POD_原图.rar', 'application/octet-stream', ['zip','rar']), true)
 eq('rar MIME 兜底', isAllowedAttachment('无名文件', 'application/x-rar-compressed', ['rar']), true)
 eq('rar 未在白名单 → 按 MIME 拒绝', isAllowedAttachment('POD.rar', 'application/x-rar-compressed', ['zip']), false)

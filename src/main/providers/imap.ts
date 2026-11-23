@@ -22,11 +22,12 @@ import {
 } from '../smtp'
 import { resolveProxy, createBridge, type Bridge } from '../net/proxy'
 import { createHash } from 'node:crypto'
-import { createWriteStream } from 'node:fs'
-import { mkdir, rm } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { mkdir, open, rm } from 'node:fs/promises'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { dirname } from 'node:path'
+import { basename, dirname, join } from 'node:path'
+import { simpleParser } from 'mailparser'
 
 // 重连/心跳节奏（ARCHITECTURE §2.4）
 export const IDLE_HEARTBEAT_MS = 5 * 60 * 1000
@@ -530,12 +531,15 @@ export class ImapSmtpProvider {
   }
 
   private bridge: Bridge | null = null
+  /** 当前连接实际使用的端点（代理时是本地桥地址），多连接并行下载复用 */
+  private endpoint: { host: string; port: number; servername: string } | null = null
 
   private async doConnect(): Promise<SyncState> {
     await this.closeClient()
     // 国内直连 Gmail 的 993 经常被断：按设置走代理（本地转发桥）
     const endpoint = await endpointViaProxy(this.cfg.imapHost, this.cfg.imapPort, this.cfg.proxy)
     this.bridge = endpoint.bridge
+    this.endpoint = { host: endpoint.host, port: endpoint.port, servername: endpoint.servername }
     if (endpoint.proxyLabel) this.log.info(`IMAP 经代理连接：${endpoint.proxyLabel}`)
     const client = new ImapFlow(
       imapOptionsOf(this.cfg, {
@@ -690,6 +694,92 @@ export class ImapSmtpProvider {
     return out
   }
 
+  /** 切换当前选中的邮箱（垃圾邮件扫描时用：下载附件必须在同一邮箱上下文） */
+  async selectMailbox(folder: string): Promise<void> {
+    const client = await this.ensureClient()
+    const mb = await client.mailboxOpen(folder, { readOnly: true })
+    if (mb) {
+      this.state = {
+        ...this.state,
+        uidValidity: String(mb.uidValidity),
+        uidNext: mb.uidNext,
+        exists: mb.exists
+      }
+    }
+  }
+
+  /** 找到垃圾邮件文件夹（Gmail: [Gmail]/垃圾邮件 / QQ: Junk 等） */
+  async findJunkFolder(): Promise<string | null> {
+    const client = await this.ensureClient()
+    try {
+      const list = await client.list()
+      const junk =
+        list.find((f) => f.specialUse === '\\Junk') ??
+        list.find((f) => /(^|\/)(spam|junk|垃圾邮件|垃圾箱|已删除|trash)$/i.test(f.path) && /spam|junk|垃圾/i.test(f.path))
+      return junk?.path ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 扫描垃圾邮件文件夹（不影响 INBOX 游标）。
+   * Gmail 常把 QQ 发来的大附件邮件判为垃圾，开启后仍能自动下载归档。
+   */
+  async fetchJunkMessages(opts: {
+    lastUid: number
+    uidValidity?: string | null
+    maxMessages?: number
+  }): Promise<{ messages: InboundMessage[]; uidValidity: string | null }> {
+    const folder = await this.findJunkFolder()
+    if (!folder) return { messages: [], uidValidity: null }
+    const client = await this.ensureClient()
+    const max = Math.max(1, Math.min(opts.maxMessages ?? 20, 100))
+    try {
+      const junkBox = await client.mailboxOpen(folder, { readOnly: true })
+      const uidValidity = junkBox ? String(junkBox.uidValidity) : null
+      let uids: number[] = []
+      if (opts.uidValidity && uidValidity && String(opts.uidValidity) !== uidValidity) {
+        // 垃圾箱重建：只处理最近 max 封，避免一次刷太多
+        const all = asUidList(await client.search({ uid: '1:*' }, { uid: true })).sort((a, b) => a - b)
+        uids = all.slice(-max)
+      } else {
+        const from = Math.max(1, Math.floor(opts.lastUid) + 1)
+        uids = asUidList(await client.search({ uid: `${from}:*` }, { uid: true }))
+          .filter((u) => u >= from && u > opts.lastUid)
+          .sort((a, b) => a - b)
+          .slice(0, max)
+      }
+      if (uids.length === 0) return { messages: [], uidValidity }
+      const metas: FetchMessageObject[] = await client.fetchAll(
+        uids.join(','),
+        {
+          uid: true,
+          envelope: true,
+          bodyStructure: true,
+          internalDate: true,
+          size: true,
+          headers: ['auto-submitted', 'references', 'in-reply-to', 'from']
+        },
+        { uid: true }
+      )
+      metas.sort((a, b) => a.uid - b.uid)
+      const out: InboundMessage[] = []
+      for (const meta of metas) {
+        try {
+          out.push(await this.toInboundMessage(meta))
+        } catch (e) {
+          this.log.warn(`解析垃圾邮件 UID=${meta.uid} 失败`, e instanceof Error ? e.message : String(e))
+        }
+      }
+      this.log.info(`垃圾邮件扫描：${folder} 新增 ${out.length} 封（UID ${uids.join(',') || '-'}）`)
+      return { messages: out, uidValidity }
+    } catch (e) {
+      this.log.warn('扫描垃圾邮件失败', e instanceof Error ? e.message : String(e))
+      return { messages: [], uidValidity: null }
+    }
+  }
+
   /**
    * 按 UID 精确取信（补扫用）：新增关键词规则后，把之前"未命中"的邮件重新解析一遍。
    * 与 fetchNewMessages 的区别：不受游标影响，也不会推进游标。
@@ -732,8 +822,12 @@ export class ImapSmtpProvider {
     const autoSubmitted = !!headers.get('auto-submitted') && !/^\s*no\s*$/i.test(headers.get('auto-submitted') ?? '')
     const from = envelope.from?.[0]
     const receivedAt = toTime(meta.internalDate ?? envelope.date)
-    const bodyText = await this.readBodyText(meta)
-    const bodyLinks = await this.readBodyLinks(meta)
+    const plain = findBodyPart(meta.bodyStructure, 'text/plain')
+    const html = findBodyPart(meta.bodyStructure, 'text/html')
+    const bodyPart = plain ?? html
+    const linkPart = html ?? plain
+    const body = await this.readBody(meta.uid, bodyPart)
+    const linkBody = linkPart === bodyPart ? body : await this.readBody(meta.uid, linkPart)
     const parts = extractAttachments(meta.bodyStructure)
     return {
       uid: meta.uid,
@@ -744,70 +838,38 @@ export class ImapSmtpProvider {
       fromAddr: from?.address ?? '',
       fromName: from?.name ?? '',
       receivedAt,
-      bodyText,
-      bodyLinks,
+      bodyText: bodyPart?.type === 'text/html' ? htmlToText(body) : body,
+      bodyLinks: this.extractBodyLinks(linkBody, linkPart?.type === 'text/html'),
       parts,
       autoSubmitted
     }
   }
 
   /** 从 html/text 正文里提取 http(s) 链接（用于识别「超大附件/网盘」邮件） */
-  private async readBodyLinks(meta: FetchMessageObject): Promise<string[]> {
-    const client = this.client
-    if (!client) return []
-    const plain = findBodyPart(meta.bodyStructure, 'text/plain')
-    const html = findBodyPart(meta.bodyStructure, 'text/html')
-    const part = html ?? plain
-    if (!part?.part) return []
-    try {
-      const dl = await client.download(String(meta.uid), part.part, { uid: true, maxBytes: MAX_BODY_BYTES })
-      if (!dl.content) return []
-      const chunks: Buffer[] = []
-      let total = 0
-      for await (const chunk of dl.content) {
-        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
-        chunks.push(buf)
-        total += buf.length
-        if (total >= MAX_BODY_BYTES) break
-      }
-      const raw = Buffer.concat(chunks).toString('utf8')
-      const text = part.type === 'text/html' ? raw.replace(/&amp;/gi, '&') : raw
-      const links: string[] = []
-      const re = /https?:\/\/[^\s<>"'）)】\]]+/gi
-      for (const m of text.matchAll(re)) {
-        const url = m[0].replace(/[.,;:]+$/, '')
-        if (!links.includes(url)) links.push(url)
-        if (links.length >= 12) break
-      }
-      return links
-    } catch (e) {
-      this.log.warn(`读取正文链接失败 UID=${meta.uid}`, e instanceof Error ? e.message : String(e))
-      return []
+  private extractBodyLinks(raw: string, isHtml: boolean): string[] {
+    const text = isHtml ? raw.replace(/&amp;/gi, '&') : raw
+    const links = new Set<string>()
+    const re = /https?:\/\/[^\s<>"'）)】\]]+/gi
+    for (const match of text.matchAll(re)) {
+      links.add(match[0].replace(/[.,;:]+$/, ''))
+      if (links.size >= 12) break
     }
+    return [...links]
   }
 
-  private async readBodyText(meta: FetchMessageObject): Promise<string> {
+  private async readBody(uid: number, part: MessageStructureObject | null): Promise<string> {
     const client = this.client
-    if (!client) return ''
-    const plain = findBodyPart(meta.bodyStructure, 'text/plain')
-    const html = plain ? null : findBodyPart(meta.bodyStructure, 'text/html')
-    const part = plain ?? html
-    if (!part?.part) return ''
+    if (!client || !part?.part) return ''
     try {
-      const dl = await client.download(String(meta.uid), part.part, { uid: true, maxBytes: MAX_BODY_BYTES })
+      const dl = await client.download(String(uid), part.part, { uid: true, maxBytes: MAX_BODY_BYTES })
       if (!dl.content) return ''
       const chunks: Buffer[] = []
-      let total = 0
       for await (const chunk of dl.content) {
-        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
-        chunks.push(buf)
-        total += buf.length
-        if (total >= MAX_BODY_BYTES) break
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array))
       }
-      const text = Buffer.concat(chunks).toString('utf8')
-      return part.type === 'text/html' ? htmlToText(text) : text
+      return Buffer.concat(chunks).toString('utf8')
     } catch (e) {
-      this.log.warn(`读取正文失败 UID=${meta.uid}`, e instanceof Error ? e.message : String(e))
+      this.log.warn(`读取正文失败 UID=${uid}`, e instanceof Error ? e.message : String(e))
       return ''
     }
   }
@@ -818,35 +880,70 @@ export class ImapSmtpProvider {
     part: InboundAttachment,
     destTmpPath: string,
     onProgress?: (received: number, total: number) => void,
-    timeoutMs?: number
+    timeoutMs?: number,
+    chunkSize?: number,
+    parallel?: { enabled: boolean; connections: number; thresholdBytes: number }
   ): Promise<DownloadAttachmentResult> {
     const client = await this.ensureClient()
     await mkdir(dirname(destTmpPath), { recursive: true })
-    const dl = await client.download(String(uid), part.partId, { uid: true })
-    if (!dl.content) {
-      throw new ProviderError('PART_NOT_FOUND', `附件不存在或已被删除：${part.filename}`, 'UNKNOWN')
+    const fetchBytes = Math.max(64 * 1024, Number(chunkSize) || 2 * 1024 * 1024)
+    if (parallel?.enabled && Number(part.size) >= (parallel.thresholdBytes || 6 * 1024 * 1024)) {
+      const ranged = await this.downloadViaRanges(
+        uid,
+        part,
+        destTmpPath,
+        onProgress,
+        Number(timeoutMs) || DOWNLOAD_TIMEOUT_MS,
+        parallel.connections
+      )
+      if (ranged) return ranged
     }
     const hash = createHash('sha256')
     let size = 0
-    let timedOut = false
-    // 预计大小：优先用 imapflow 给的解码后大小，其次用 BODYSTRUCTURE 的编码大小
-    const expected = Number((dl as { meta?: { expectedSize?: number } }).meta?.expectedSize ?? part.size ?? 0)
-    let lastReport = 0
+    const controller = new AbortController()
+    let failure: ProviderError | undefined
+    const startedAt = Date.now()
+    let lastDataAt = startedAt
+    let lastNetworkBytes = client.stats().received
+    const networkStart = lastNetworkBytes
+    const abort = (error: ProviderError): void => {
+      if (failure) return
+      failure = error
+      controller.abort()
+      // 关闭连接才能取消仍在等待完整 IMAP 响应的 FETCH。
+      client.close()
+    }
+    // ImapFlow 收齐一个 FETCH 响应后才交付这一段。网络仍在接收时保留下载。
+    const stallTimer = setInterval(() => {
+      const received = client.stats().received
+      const now = Date.now()
+      if (received > lastNetworkBytes) lastDataAt = now
+      lastNetworkBytes = received
+      if (now - lastDataAt >= 60_000) {
+        abort(new ProviderError('DOWNLOAD_STALLED', 'IMAP 连接连续 60 秒未收到数据，已中断本次下载'))
+      }
+    }, 5000)
     const timer = setTimeout(() => {
-      timedOut = true
-      dl.content!.destroy(new Error('download timeout'))
+      abort(new ProviderError('DOWNLOAD_TIMEOUT', '附件下载超时，可在「下载记录」调整超时设置后重试'))
     }, Math.max(30_000, Number(timeoutMs) || DOWNLOAD_TIMEOUT_MS))
     try {
+      const dl = await client.download(String(uid), part.partId, { uid: true, chunkSize: fetchBytes, decodeText: false })
+      if (!dl.content) {
+        throw new ProviderError('PART_NOT_FOUND', `附件不存在或已被删除：${part.filename}`, 'UNKNOWN')
+      }
+      // RFC822.SIZE 是整封邮件大小。附件估算使用 MIME 部件的编码长度。
+      const expected = dl.meta.encoding === 'base64' ? Math.round(part.size * 3 / 4) : part.size
+      let lastReportAt = 0
       await pipeline(
         dl.content,
         new Transform({
           transform(chunk: Buffer, _enc, cb) {
             size += chunk.length
+            lastDataAt = Date.now()
             hash.update(chunk)
-            // 节流：每 200ms 或每 512KB 上报一次，避免事件刷屏
             const now = Date.now()
-            if (onProgress && (now - lastReport > 200 || size - lastReport > 512 * 1024)) {
-              lastReport = now
+            if (onProgress && now - lastReportAt >= 200) {
+              lastReportAt = now
               try {
                 onProgress(size, expected)
               } catch {
@@ -856,28 +953,142 @@ export class ImapSmtpProvider {
             cb(null, chunk)
           }
         }),
-        createWriteStream(destTmpPath)
+        createWriteStream(destTmpPath),
+        { signal: controller.signal }
       )
+      if (failure) throw failure
+      if (size === 0) throw new ProviderError('EMPTY_ATTACHMENT', '下载到的附件为空（可能被服务器拒绝）')
     } catch (e) {
       await rm(destTmpPath, { force: true }).catch(() => {})
-      if (timedOut) throw new ProviderError('DOWNLOAD_TIMEOUT', '附件下载超时，请检查网络后点「重试下载」（可在下载记录页把超时调大）')
+      if (failure) throw failure
       if (e instanceof ProviderError) throw e
       const msg = e instanceof Error ? e.message : String(e)
       if (/too large|maxBytes/i.test(msg)) throw new ProviderError('ATTACHMENT_TOO_LARGE', '附件超过单封大小限制')
       throw new ProviderError('DOWNLOAD_FAILED', `附件下载失败：${msg}`)
     } finally {
       clearTimeout(timer)
+      clearInterval(stallTimer)
     }
-    if (size === 0) {
-      await rm(destTmpPath, { force: true }).catch(() => {})
-      throw new ProviderError('EMPTY_ATTACHMENT', '下载到的附件为空（可能被服务器拒绝）')
-    }
+    this.log.info(`IMAP 附件传输 UID=${uid} part=${part.partId}，耗时 ${Date.now() - startedAt}ms`, {
+      fetchBytes, networkBytes: Math.max(0, client.stats().received - networkStart), fileBytes: size
+    })
     try {
       onProgress?.(size, size)
     } catch {
       /* ignore */
     }
     return { size, sha256: hash.digest('hex'), tmpPath: destTmpPath }
+  }
+
+  /**
+   * 多连接并行下载：IMAP 单个 FETCH 是串行的，但可以把整封邮件按字节切成 N 段，
+   * 在 N 条独立连接上同时 FETCH（source: {start,maxLength}），最后本地用 mailparser
+   * 解析出目标附件。Gmail 单连接约 0.4MB/s，4 连接实测约 0.9-1.3MB/s。
+   * 失败返回 null，由调用方回退到普通单连接下载。
+   */
+  private async downloadViaRanges(
+    uid: number,
+    part: InboundAttachment,
+    destTmpPath: string,
+    onProgress: ((received: number, total: number) => void) | undefined,
+    timeoutMs: number,
+    connections: number
+  ): Promise<DownloadAttachmentResult | null> {
+    const clients: ImapFlow[] = []
+    const emlPath = `${destTmpPath}.eml`
+    try {
+      const main = await this.ensureClient()
+      const meta = await main.fetchOne(String(uid), { size: true }, { uid: true })
+      if (!meta) return null
+      const total = Number((meta as { size?: number }).size ?? 0)
+      if (!total || total <= 0) return null
+      const n = Math.max(2, Math.min(8, Math.floor(connections) || 4))
+      const endpoint = this.endpoint ?? { host: this.cfg.imapHost, port: this.cfg.imapPort, servername: this.cfg.imapHost }
+      // 额外连接（主连接保留给轮询）
+      for (let i = 0; i < n; i++) {
+        const c = new ImapFlow(
+          imapOptionsOf(this.cfg, {
+            host: endpoint.host,
+            port: endpoint.port,
+            tls: { rejectUnauthorized: !this.cfg.allowSelfSigned, servername: endpoint.servername },
+            connectionTimeout: 20_000,
+            greetingTimeout: 20_000,
+            disableAutoIdle: true
+          })
+        )
+        await c.connect()
+        await c.mailboxOpen('INBOX', { readOnly: true })
+        clients.push(c)
+      }
+      const fh = await open(emlPath, 'w')
+      const seg = Math.ceil(total / n)
+      let done = 0
+      const deadline = Date.now() + Math.max(60_000, timeoutMs)
+      try {
+        await Promise.all(
+          clients.map(async (c, i) => {
+            const start = i * seg
+            const len = Math.min(seg, total - start)
+            if (len <= 0) return
+            const remain = deadline - Date.now()
+            if (remain <= 0) throw new ProviderError('DOWNLOAD_STALLED', '并行下载超时')
+            const r = await c.fetchOne(String(uid), { source: { start, maxLength: len } }, { uid: true })
+            const buf = (r as { source?: Buffer } | false) && !(r as false) ? (r as { source?: Buffer }).source : undefined
+            if (!buf || buf.length === 0) throw new ProviderError('DOWNLOAD_FAILED', `分段 ${i} 为空`)
+            await fh.write(buf, 0, buf.length, start)
+            done += buf.length
+            try {
+              onProgress?.(Math.min(done, total), total)
+            } catch {
+              /* ignore */
+            }
+          })
+        )
+      } finally {
+        await fh.close().catch(() => {})
+      }
+      // 本地解析出目标附件
+      const parsed = await simpleParser(createReadStream(emlPath))
+      const wanted = basename(part.filename).toLowerCase()
+      const atts = (parsed.attachments ?? []).filter((a) => a.content && a.content.length > 0)
+      const exact = atts.filter((a) => (a.filename ?? '').toLowerCase() === wanted)
+      const picked =
+        exact.find((a) => Math.abs(a.content.length - part.size) <= Math.max(2048, part.size * 0.02)) ??
+        exact[0] ??
+        atts
+          .filter((a) => Math.abs(a.content.length - part.size) <= Math.max(2048, part.size * 0.02))
+          .sort((a, b) => b.content.length - a.content.length)[0]
+      if (!picked?.content) return null
+      const content = picked.content
+      const hash = createHash('sha256').update(content).digest('hex')
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(destTmpPath, content)
+      try {
+        onProgress?.(content.length, content.length)
+      } catch {
+        /* ignore */
+      }
+      this.log.info(
+        `IMAP 并行下载完成 UID=${uid} ${part.filename}：整封 ${(total / 1048576).toFixed(1)}MB，${n} 连接，附件 ${(content.length / 1048576).toFixed(1)}MB`
+      )
+      return { size: content.length, sha256: hash, tmpPath: destTmpPath }
+    } catch (e) {
+      this.log.warn(`并行下载失败，回退单连接：${e instanceof Error ? e.message : String(e)}`)
+      return null
+    } finally {
+      for (const c of clients) {
+        try {
+          await c.logout()
+        } catch {
+          try {
+            c.close()
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      await rm(emlPath, { force: true }).catch(() => {})
+    }
   }
 
   // ---------------- 发信 ----------------

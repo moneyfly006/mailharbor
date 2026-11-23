@@ -132,6 +132,7 @@ function AccountCard({
   account,
   busy,
   onTest,
+  onQqLogin,
   onEdit,
   onCheck,
   onToggle,
@@ -140,6 +141,7 @@ function AccountCard({
   account: Account
   busy: boolean
   onTest: () => void
+  onQqLogin: () => void
   onEdit: () => void
   onCheck: () => void
   onToggle: () => void
@@ -182,6 +184,11 @@ function AccountCard({
           <Button size="sm" icon="refresh" loading={busy} onClick={onTest}>
             测试连接
           </Button>
+          {account.preset === 'qq' && !off && !account.sendOnly ? (
+            <Button size="sm" icon="external" onClick={onQqLogin}>
+              登录 QQ 网页
+            </Button>
+          ) : null}
           {off ? (
             <>
               <Button size="sm" icon="play" onClick={onToggle}>
@@ -804,6 +811,11 @@ export function Accounts(): JSX.Element {
                 account={account}
                 busy={busyId === account.id}
                 onTest={() => void testAccount(account)}
+                onQqLogin={() => {
+                  void api.accounts.qqLogin(account.id).then((result) => {
+                    if (!result.ok) pushToast('error', '无法打开 QQ 登录窗口', result.message)
+                  }).catch((error) => pushToast('error', '无法打开 QQ 登录窗口', errMsg(error)))
+                }}
                 onEdit={() => editAccount(account)}
                 onCheck={() => editAccount(account, true)}
                 onToggle={() => void toggleAccount(account)}

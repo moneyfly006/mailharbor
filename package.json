@@ -1,6 +1,6 @@
 {
   "name": "mailharbor",
-  "version": "0.1.18",
+  "version": "0.1.23",
   "description": "MailHarbor · 邮件图稿自动归档（IMAP 收信 / SMTP 回信）",
   "main": "out/main/index.js",
   "author": "MailHarbor",
@@ -22,7 +22,8 @@
     "test:sqlite": "MH_FORCE_NODE_SQLITE=1 node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-sqlite-adapter.ts",
     "test:packaged": "node scripts/packaged-e2e.mjs",
     "test:seed": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-seed.ts",
-    "test:providers": "node scripts/test-providers.mjs"
+    "test:providers": "node scripts/test-providers.mjs",
+    "test:spam": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-spam-scan.ts"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",

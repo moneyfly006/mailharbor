@@ -7,6 +7,7 @@
  * 运行：node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/test-e2e-backend.ts
  */
 import { EventEmitter } from 'node:events'
+import { createHash } from 'node:crypto'
 import Database from 'better-sqlite3'
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -286,7 +287,9 @@ try {
     const m = repos.getMessageByUid(account.id, 4)
     if (!m) return false
     const ds = repos.listDeliveriesByMessage(m.id)
-    return ds.length === 2 && ds.some((d) => d.state === 'retry_wait')
+    return ds.length === 2
+      && ds.some((d) => d.target_path === prodDir && d.state === 'done')
+      && ds.some((d) => d.target_path === missingDir && d.state === 'retry_wait')
   }, 20_000, '第 4 封部分失败')
   ok('第 4 封产出 2 条投递且一条 retry_wait', partialReady)
 
@@ -414,13 +417,13 @@ try {
   server.imap.appendMessage('INBOX', [], false, new Uint8Array(mimeFor({
     subject: '原图+卡套 类型未勾选测试 POD_ORDER_99999',
     from: { name: 'Fallback', address: 'fallback@inkpressed.co' },
-    fileName: 'POD_ORDER_99999.zip',
+    fileName: 'POD_ORDER_99999_fallback.zip',
     contentBuffer: zip2,
     date: new Date()
   })))
   await backend.scheduler.checkNow()
   const fallbackDone = await waitFor(
-    () => readdirSync(prodDir).some((f) => f.startsWith('POD_ORDER_99999')),
+    () => existsSync(join(prodDir, 'POD_ORDER_99999_fallback.zip')),
     45_000,
     '白名单未勾 ZIP 仍归档'
   )
@@ -453,16 +456,11 @@ try {
 
   console.log('手动重试下载（删掉临时文件后重新拉取）:')
   // 选一封已归档的邮件，把它的附件 tmp 与状态重置，模拟"下载失败"后用户点重试
-  const targetMsg = repos.listRecords({ page: 1, pageSize: 50 }).rows.find(
-    (r) =>
-      r.status === 'done' &&
-      r.attachments.length > 0 &&
-      r.matchedRuleId != null &&
-      r.attachments.every((a) => a.deliveries.length > 0 && a.deliveries.every((d) => d.state === 'done'))
-  )!
-  const att = targetMsg.attachments[0]
+  const targetMsg = matched!
+  const att = repos.listAttachmentsByMessage(targetMsg.id)[0]!
   ok('找到可重试的邮件', !!att)
-  rmSync(att.tmpPath ?? '', { force: true })
+  rmSync(att.tmp_path!, { force: true })
+  const pathsBefore = repos.listDeliveriesByMessage(targetMsg.id).map((delivery) => delivery.saved_path)
   const reset = repos.resetMessageForDownloadRetry(targetMsg.id)
   ok('重置返回账户与 UID', !!reset && reset.imapUid > 0)
   eq('重置后状态=queued', repos.getMessage(targetMsg.id)?.status, 'queued')
@@ -477,8 +475,37 @@ try {
   ok('重试后附件已重新下载到临时目录', attRetried)
   const recAfter = repos.listRecords({ page: 1, pageSize: 50 }).rows.find((x) => x.id === targetMsg.id)!
   ok('重试后状态不再是 failed', recAfter.status !== 'failed')
-  const doneCount = recAfter.attachments.flatMap((a) => a.deliveries).filter((d) => d.state === 'done').length
-  ok('重试后已成功的路径没有重复写(todo 仍为原来数量)', doneCount >= 2)
+  eq('重试后保留已成功的投递路径', repos.listDeliveriesByMessage(targetMsg.id).map((delivery) => delivery.saved_path), pathsBefore)
+
+  console.log('大附件分块配置与文件完整性:')
+  const fetchSizes: number[] = []
+  const fetch = server.imap.getCommandHandler('UID FETCH')
+  server.imap.setCommandHandler('UID FETCH', (connection, parsed, data, callback) => {
+    const items = parsed.attributes[1]
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (item.section?.[0]?.value === '2' && item.partial?.length === 2) {
+          fetchSizes.push(Number(item.partial[1]))
+        }
+      }
+    }
+    return fetch(connection, parsed, data, callback)
+  })
+  settings.downloadChunkSizeMB = 1
+  const largeContent = Buffer.alloc(3 * 1024 * 1024 + 123, 0x5a)
+  const largePath = join(prodDir, 'large-imap.tif')
+  server.imap.appendMessage('INBOX', [], false, new Uint8Array(mimeFor({
+    subject: '原图+卡套 多分块验证',
+    fileName: 'large-imap.tif',
+    contentBuffer: largeContent
+  })))
+  await backend.scheduler.checkNow()
+  ok('跨多个 FETCH 的附件已归档', await waitFor(() => existsSync(largePath), 20_000, '大附件多分块'))
+  ok('UI 的 1 MiB 设置用于所有附件 FETCH', fetchSizes.length > 1 && fetchSizes.every((size) => size === 1024 * 1024))
+  if (existsSync(largePath)) {
+    const sha256 = (data: Buffer): string => createHash('sha256').update(data).digest('hex')
+    eq('分块下载内容完整', sha256(readFileSync(largePath)), sha256(largeContent))
+  }
 
   // -------------------------------------------------------------------------
   // 事件推送（ipc.ts 依赖这些事件刷新 UI）

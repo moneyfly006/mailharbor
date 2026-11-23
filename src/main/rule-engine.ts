@@ -23,7 +23,7 @@ export interface MatchHit {
 }
 
 const FULL_TO_HALF: Record<string, string> = {
-  '＋': '+', '－': '-', '／': '/', '（': '(', '）': ')', '：': ':',
+  '＋': '+', '－': '-', '—': '-', '–': '-', '﹣': '-', '／': '/', '（': '(', '）': ')', '：': ':',
   '　': '', '\u00a0': '', '\u200b': '', '\u200c': '', '\u200d': '', '\ufeff': ''
 }
 
@@ -87,22 +87,44 @@ export function matchOne(rule: Pick<Rule, 'id' | 'keyword' | 'scope' | 'mode'>, 
  */
 function exactHit(looseSubject: string, kw: string): boolean {
   const kwLoose = kw.replace(/\s+/g, '')
-  const noSpace = looseSubject.replace(/\s+/g, '')
-  if (noSpace === kwLoose) return true
-  if (!noSpace.startsWith(kwLoose)) return false
+  // 客户常在标题前加装饰：`【原图+手机壳】`、`[原图+手机壳]`、`★原图+手机壳`、表情前缀
+  // → 先剥掉开头连续的非字母/数字/汉字字符
+  const loose = looseSubject.replace(/^[^0-9A-Za-z\u4e00-\u9fff]+/, '')
 
-  // 关键词在原文里后面紧跟的字符（保留分隔符，用来判断"关键词 + 说明"）
-  const idx = looseSubject.indexOf(kwLoose)
-  const afterRaw = idx >= 0 ? looseSubject.slice(idx + kwLoose.length) : noSpace.slice(kwLoose.length)
+  const SEP = /^[\s\-_:：|/.、,()（）\[\]【】0-9A-Za-z]/
+  const BIZ_SUFFIX = /^(追加|打样|补发|补|确认|收尾|返|重|新|老|加|第|再|更)/
+  // `+` 与 `-` 混用视为同一分隔（原图-手机壳 / 原图—手机壳 也能命中）
+  const plusify = (s: string): string => s.replace(/[-+]/g, '+')
 
-  // ① 分隔符 / 数字 / 字母开头 → 一定是「关键词 + 说明」
-  //    例：`原图+卡套 追加: X`、`原图+浴室垫 BATH-CASE2`、`原图+卡套-打样`、`原图+卡套：第2批`
-  if (/^[\s\-_:：|/.、,，()（）\[【0-9A-Za-z]/.test(afterRaw)) return true
+  /** 在 target 里按"忽略空白"的方式匹配前缀 kw，返回关键词之后的原始剩余部分 */
+  const matchPrefix = (target: string, needle: string): string | null => {
+    let i = 0
+    let j = 0
+    while (i < target.length && j < needle.length) {
+      if (/\s/.test(target[i]!)) {
+        i++
+        continue
+      }
+      if (target[i]!.toLowerCase() !== needle[j]!.toLowerCase()) return null
+      i++
+      j++
+    }
+    if (j < needle.length) return null
+    return target.slice(i)
+  }
 
-  // ② 紧跟中文：业务说明词（追加/打样/补发…）算同一关键词；「卡套盒」「卡套子」这类修饰算不同品类
-  const restNoSpace = noSpace.slice(kwLoose.length)
-  if (/^[\u4e00-\u9fff]/.test(restNoSpace)) {
-    return /^(追加|打样|补发|补|确认|收尾|返|重|新|老|加|第|再|更)/.test(restNoSpace)
+  for (const [target, needle] of [
+    [loose, kwLoose],
+    [plusify(loose), plusify(kwLoose)]
+  ] as Array<[string, string]>) {
+    const rest = matchPrefix(target, needle)
+    if (rest === null) continue
+    if (rest.replace(/\s+/g, '') === '') return true
+    // ① 分隔符 / 数字 / 字母开头 → 「关键词 + 说明」
+    if (SEP.test(rest)) return true
+    // ② 紧跟中文：只有业务说明词算同一关键词（避免「卡套盒」误命中）
+    const restNoSpace = rest.replace(/\s+/g, '')
+    if (/^[\u4e00-\u9fff]/.test(restNoSpace) && BIZ_SUFFIX.test(restNoSpace)) return true
   }
   return false
 }

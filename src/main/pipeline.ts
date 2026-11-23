@@ -11,37 +11,31 @@ import { BUSINESS_DEFAULT_TYPES, isAllowedAttachment, matchRules } from './rule-
 import { pathExists, sanitizeFilename } from './file-writer'
 import type { InboundAttachment, InboundMessage } from './providers/imap'
 import { createLogger, type Logger } from './log'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { rm, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-/** 常见的「超大附件 / 网盘」下载链接（这些链接必须人工登录/点击下载，IMAP 拿不到文件） */
-const BIG_LINK_PATTERNS = [
-  /mail\.qq\.com\/cgi-bin/i,
-  /wx\.mail\.qq\.com/i,
-  /ftnEx/i,
-  /weiyun\.com/i,
-  /pan\.baidu\.com/i,
-  /yun\.baidu\.com/i,
-  /189\.cn\/t\//i,
-  /cloud\.189\.cn/i,
-  /alipan\.com/i,
-  /aliyundrive\.com/i,
-  /drive\.google\.com/i,
-  /dropbox\.com/i,
-  /1drv\.ms/i,
-  /onedrive\.live\.com/i,
-  /sharepoint\.com/i
+const FILE_SHARE_HOSTS = [
+  'wx.mail.qq.com', 'ftn.qq.com', 'weiyun.com', 'pan.baidu.com', 'yun.baidu.com', 'cloud.189.cn',
+  'alipan.com', 'aliyundrive.com', 'drive.google.com', 'dropbox.com', '1drv.ms', 'onedrive.live.com', 'sharepoint.com'
 ]
 
-export function isBigAttachmentLink(url: string): boolean {
-  return BIG_LINK_PATTERNS.some((re) => re.test(url))
+export function isBigAttachmentLink(value: string): boolean {
+  const url = URL.parse(value)
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false
+  const host = url.hostname
+  if (host === 'mail.qq.com' && /^\/cgi-bin\//i.test(url.pathname)) return true
+  if (host === '189.cn' && /^\/t\//i.test(url.pathname)) return true
+  if (FILE_SHARE_HOSTS.some((domain) => host === domain || host.endsWith(`.${domain}`))) return true
+  return url.protocol === 'https:' && isAllowedAttachment(url.pathname, undefined, BUSINESS_DEFAULT_TYPES)
 }
 
 export function isBigAttachmentMail(links: string[]): boolean {
   return links.some((l) => isBigAttachmentLink(l))
 }
-import { join } from 'node:path'
-
 export type Emit = (e: MainEvent) => void
 
 /** pipeline 只依赖 provider 的下载能力，便于单测注入假 provider */
@@ -51,7 +45,9 @@ export interface AttachmentDownloader {
     part: InboundAttachment,
     destTmpPath: string,
     onProgress?: (received: number, total: number) => void,
-    timeoutMs?: number
+    timeoutMs?: number,
+    chunkSize?: number,
+    parallel?: { enabled: boolean; connections: number; thresholdBytes: number }
   ): Promise<{ size: number; sha256: string; tmpPath: string }>
 }
 
@@ -69,6 +65,10 @@ export interface PipelineDeps {
   dispatcher: DeliveryQueue
   replyService: ReplySink
   tmpDir: string
+  linkedFiles?: {
+    supports(account: Account, url: string): boolean
+    download(accountId: number, messageId: number, url: string, dest: string): Promise<{ path: string; filename: string } | null>
+  }
   now?: () => number
   logger?: Logger
 }
@@ -86,6 +86,7 @@ export const DEFAULT_FALLBACK_TYPES = ['zip', 'rar', '7z', 'tar', 'tif', 'tiff']
 export class MailPipeline {
   private deps: PipelineDeps
   private log: Logger
+  private linkedDownloads = new Set<number>()
 
   constructor(deps: PipelineDeps) {
     this.deps = deps
@@ -99,7 +100,12 @@ export class MailPipeline {
   /**
    * 处理一封新邮件（按 account 串行调用；内部 catch 掉业务错误并写状态，避免整批中断）。
    */
-  async process(account: Account, provider: AttachmentDownloader, msg: InboundMessage): Promise<ProcessOutcome> {
+  async process(
+    account: Account,
+    provider: AttachmentDownloader,
+    msg: InboundMessage,
+    mailbox = 'INBOX'
+  ): Promise<ProcessOutcome> {
     const fallbackOutcome = (messageId: number, status: MessageStatus, skipped = false): ProcessOutcome => ({
       messageId,
       status,
@@ -112,7 +118,7 @@ export class MailPipeline {
     // queued 表示"处理中断/用户手动重试下载"，需要重新走一遍
     const existing = repos.getMessageByUid(account.id, msg.uid)
     const reprocessable: MessageStatus[] = ['ignored_no_keyword', 'ignored_type', 'queued']
-    if (existing && !reprocessable.includes(existing.status)) {
+    if (existing && (this.linkedDownloads.has(existing.id) || !reprocessable.includes(existing.status))) {
       this.log.debug(`邮件 UID=${msg.uid} 已处理过（#${existing.id} ${existing.status}），跳过`)
       return fallbackOutcome(existing.id, existing.status, true)
     }
@@ -136,21 +142,76 @@ export class MailPipeline {
       fromName: msg.fromName,
       receivedAt: msg.receivedAt,
       status: 'queued',
-      links: msg.bodyLinks.length > 0 ? msg.bodyLinks : null
+      links: msg.bodyLinks.length > 0 ? msg.bodyLinks : null,
+      mailbox
     })
     const messageId = up.id
 
-    // 超大附件 / 网盘链接邮件：邮件里没有真实附件，只有下载链接 → 标为「待手动下载」
+    // 邮件里只有文件链接时，优先使用已启用的网页下载账号。
     if (msg.parts.length === 0 && hitRules.length > 0 && isBigAttachmentMail(msg.bodyLinks)) {
       repos.updateMessageMatch(messageId, {
         matchedRuleId: hitRules[0]!.rule.id,
         matchedKeyword: hitRules[0]!.rule.keyword,
         matchSource: hitRules[0]!.hit.source
       })
+      const linked = this.deps.linkedFiles
+      const links = linked ? msg.bodyLinks.filter((url) => linked.supports(account, url)) : []
+      if (linked && links.length > 0) {
+        const rules = hitRules.map(({ rule }) => rule)
+        const targets = rules.flatMap((rule) => rule.targets).filter((target) => target.enabled)
+        if (targets.length > 0) {
+          this.linkedDownloads.add(messageId)
+          this.emitRecord(messageId)
+          try {
+            const items = []
+            for (const url of links) {
+              const key = createHash('sha256').update(url).digest('hex').slice(0, 24)
+              const partId = `web:${key}`
+              const dest = join(this.deps.tmpDir, `web-${messageId}-${key}.part`)
+              let attachment = repos.listAttachmentsByMessage(messageId).find((entry) => entry.part_id === partId)
+              if (attachment?.status !== 'downloaded' || !attachment.tmp_path || !(await pathExists(attachment.tmp_path))) {
+                try {
+                  const file = await linked.download(account.id, messageId, url, dest)
+                  if (!file) throw new Error('中转站下载已取消')
+                  const fileStat = await stat(file.path)
+                  if (!fileStat.isFile() || fileStat.size === 0) throw new Error('中转站返回了空文件')
+                  const hash = createHash('sha256')
+                  for await (const buffer of createReadStream(file.path)) hash.update(buffer)
+                  attachment = repos.upsertAttachment(messageId, {
+                    partId, filename: file.filename, mimeType: null, declaredSize: fileStat.size
+                  })
+                  repos.setAttachmentDownloaded(attachment.id, { tmpPath: file.path, size: fileStat.size, sha256: hash.digest('hex') })
+                } catch (error) {
+                  await rm(dest, { force: true }).catch(() => {})
+                  throw error
+                }
+              }
+              for (const target of targets) items.push({
+                messageId, attachmentId: attachment.id, targetId: target.id,
+                targetPath: target.path, required: target.required
+              })
+            }
+            repos.createDeliveries(items)
+            repos.updateMessageReplyStatus(messageId, this.initialReplyStatus(account, msg, rules), null)
+            this.emitRecord(messageId)
+            this.deps.emit({ type: 'delivery:changed', messageId })
+            this.deps.dispatcher.schedule()
+            return { messageId, status: 'queued', matchedRuleIds: rules.map((rule) => rule.id), deliveryCount: items.length, skipped: false }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'QQ 中转站下载失败'
+            repos.updateMessageStatus(messageId, 'failed', message)
+            repos.updateMessageReplyStatus(messageId, 'disabled', '中转站下载失败')
+            this.emitRecord(messageId)
+            return fallbackOutcome(messageId, 'failed')
+          } finally {
+            this.linkedDownloads.delete(messageId)
+          }
+        }
+      }
       repos.updateMessageStatus(
         messageId,
         'manual_needed',
-        '这是「超大附件 / 文件中转站 / 网盘链接」邮件：文件不在邮件里，需要点开链接手动下载。下载后点「选择已下载的文件归档」，软件会复制到规则路径并解压，然后自动回信。'
+        '邮件正文含有文件下载链接。可在应用内下载并归档，也可用浏览器下载后选择文件归档。'
       )
       repos.updateMessageReplyStatus(messageId, 'disabled', '等待手动下载归档后再回信')
       this.log.info(`超大附件邮件：${msg.subject}（正文链接 ${msg.bodyLinks.length} 个）→ manual_needed`)
@@ -167,7 +228,12 @@ export class MailPipeline {
         ? msg.parts.filter((p) => isAllowedAttachment(p.filename, p.mimeType, this.fallbackTypes(rules)))
         : []
       if (allowed.length === 0) {
-        repos.updateMessageStatus(messageId, 'ignored_no_keyword')
+        const enabledKeywords = rules.map((r) => r.keyword).join(' / ') || '（没有启用的规则）'
+        repos.updateMessageStatus(
+          messageId,
+          'ignored_no_keyword',
+          `未命中关键词：邮件标题是「${msg.subject || '(无主题)'}」，当前启用的规则是「${enabledKeywords}」。若标题写法不同（多了前后缀/符号），可在「触发规则」里用「标题测试」核对，或把匹配方式改成「包含」。`
+        )
         repos.updateMessageReplyStatus(messageId, 'disabled', '未命中关键词，不自动回信')
         this.log.info(`未命中关键词：${msg.subject || '(无主题)'} → ignored_no_keyword`)
         this.emitRecord(messageId)
@@ -274,8 +340,15 @@ export class MailPipeline {
         repos.hitIncrement(rule.id, { messages: 1, files })
       }
     }
-    const replyStatus = this.initialReplyStatus(account, msg, hitRules.map((h) => h.rule))
-    repos.updateMessageReplyStatus(messageId, replyStatus)
+    const fromJunk = mailbox !== 'INBOX'
+    const replyStatus = fromJunk
+      ? ('disabled' as const)
+      : this.initialReplyStatus(account, msg, hitRules.map((h) => h.rule))
+    repos.updateMessageReplyStatus(
+      messageId,
+      replyStatus,
+      fromJunk ? '邮件来自垃圾邮件文件夹，默认不自动回信' : undefined
+    )
     repos.updateMessageStatus(
       messageId,
       'queued',
@@ -337,11 +410,35 @@ export class MailPipeline {
       // 弱网/大附件：自动重试若干次（每次重新发 FETCH，进度从 0 开始）
       const maxAttempts = Math.max(1, Number(this.setting<number>('downloadAttempts') ?? 3))
       const timeoutMs = Math.max(60, Number(this.setting<number>('downloadTimeoutSec') ?? 900)) * 1000
+      const chunkMB = Number(this.setting<number>('downloadChunkSizeMB'))
+      const chunkSize = ([1, 2, 4, 8, 16].includes(chunkMB) ? chunkMB : 2) * 1024 * 1024
+      // 大附件多连接并行（把整封邮件切段，在 N 条连接上同时取，再本地解析附件）
+      const parallel = {
+        enabled: this.setting<boolean>('parallelDownload') !== false,
+        connections: Math.max(2, Math.min(8, Number(this.setting<number>('parallelConnections') ?? 4))),
+        thresholdBytes: Math.max(1, Number(this.setting<number>('parallelThresholdMB') ?? 6)) * 1024 * 1024
+      }
       let res: { size: number; sha256: string; tmpPath: string } | null = null
       let lastErr: { message: string; code: string } | null = null
+      let completedAttempt = 1
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const emitProgress = (received: number, total: number): void => {
-          const pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : null
+        let lastReceived = 0
+        let lastTotal = Math.max(0, Number(part.size) || 0)
+        let lastSampleAt = Date.now()
+        let lastSampleBytes = 0
+        let speed = 0
+        const emitProgress = (received: number, total: number, note?: string): void => {
+          lastReceived = received
+          lastTotal = total
+          const nowMs = Date.now()
+          const dt = (nowMs - lastSampleAt) / 1000
+          if (dt >= 1) {
+            const delta = received - lastSampleBytes
+            speed = Math.round(delta / dt)
+            lastSampleAt = nowMs
+            lastSampleBytes = received
+          }
+          const pct = total > 0 ? Math.min(99, Math.round((received / total) * 100)) : null
           this.deps.emit({
             type: 'download:progress',
             progress: {
@@ -353,12 +450,19 @@ export class MailPipeline {
               percent: pct,
               state: 'active',
               attempt,
+              bytesPerSec: speed,
+              message: note,
               updatedAt: Date.now()
             }
           })
         }
+        // 心跳：60 秒没收到数据会被看门狗中断；在此之前每 3 秒推一次，避免界面看起来"卡住没进度"
+        const heartbeat = setInterval(() => {
+          emitProgress(lastReceived, lastTotal, lastReceived === 0 ? '等待首段数据…' : undefined)
+        }, 3000)
         try {
-          res = await provider.downloadAttachment(msg.uid, part, dest, emitProgress, timeoutMs)
+          res = await provider.downloadAttachment(msg.uid, part, dest, emitProgress, timeoutMs, chunkSize, parallel)
+          completedAttempt = attempt
           lastErr = null
           break
         } catch (e) {
@@ -376,12 +480,15 @@ export class MailPipeline {
               percent: null,
               state: attempt >= maxAttempts ? 'failed' : 'active',
               attempt,
+              bytesPerSec: 0,
               message,
               updatedAt: Date.now()
             }
           })
-          if (attempt < maxAttempts) await sleep(1500 * attempt)
+        } finally {
+          clearInterval(heartbeat)
         }
+        if (attempt < maxAttempts) await sleep(1500 * attempt)
       }
 
       if (!res) {
@@ -411,7 +518,8 @@ export class MailPipeline {
           total: res.size,
           percent: 100,
           state: 'done',
-          attempt: 1,
+          attempt: completedAttempt,
+          bytesPerSec: 0,
           updatedAt: Date.now()
         }
       })

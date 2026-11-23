@@ -584,3 +584,65 @@
   color: var(--color-text-tertiary, #5E6873);
   margin-left: auto;
 }
+
+/* 操作列：超大附件两个按钮 + 重试按钮，给足宽度避免文字重叠 */
+.rec-table th:last-child,
+.rec-table td:last-child {
+  min-width: 200px;
+}
+
+.rec-table td {
+  vertical-align: middle;
+}
+
+.rec-table .row-actions {
+  flex-wrap: nowrap;
+}
+
+/* 操作列：图标按钮紧凑排列，避免文字重叠 */
+.rec-table td:last-child {
+  white-space: nowrap;
+}
+
+.icon-btn--accent {
+  color: var(--color-accent, #C8422D);
+  border: 1px solid rgba(200, 66, 45, 0.28);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+}
+
+.icon-btn--accent:hover {
+  background: rgba(200, 66, 45, 0.08);
+}
+
+.icon-btn--accent:disabled {
+  opacity: 0.45;
+}
+
+/* 状态列：处理中时附带下载进度 */
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.status-progress {
+  font-size: 10px;
+  color: var(--color-text-tertiary, #5E6873);
+  white-space: nowrap;
+}
+
+.mailbox-tag {
+  font-size: 9.5px;
+  color: var(--color-warning, #96660F);
+  border: 1px solid rgba(150, 102, 15, 0.3);
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.4;
+}

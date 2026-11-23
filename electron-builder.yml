@@ -6,6 +6,16 @@ directories:
   output: release
   buildResources: resources
 
+# 只保留中英文语言包（Electron 默认 55 种，约 49MB → 约 2MB）
+electronLanguages:
+  - zh-CN
+  - en-US
+
+# 最高压缩（安装包更小，构建稍慢）
+compression: maximum
+
+afterPack: scripts/after-pack.cjs
+
 files:
   - out/**
 

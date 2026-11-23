@@ -162,6 +162,7 @@ export interface MessageRow {
   reply_status: ReplyStatus
   error: string | null
   links: string | null
+  mailbox: string | null
   created_at: number
   updated_at: number
 }
@@ -574,6 +575,18 @@ export function setAccountStatus(
 }
 
 /** 增量收信游标 / 健康时间 */
+export function getAccountSpamState(id: number): { lastUid: number; uidValidity: string | null } | null {
+  const row = db().prepare('SELECT spam_last_uid, spam_uid_validity FROM accounts WHERE id=?').get(id) as
+    | { spam_last_uid: number; spam_uid_validity: string | null }
+    | undefined
+  if (!row) return null
+  return { lastUid: row.spam_last_uid ?? 0, uidValidity: row.spam_uid_validity }
+}
+
+export function updateAccountSpamState(id: number, lastUid: number, uidValidity: string | null): void {
+  db().prepare('UPDATE accounts SET spam_last_uid=?, spam_uid_validity=? WHERE id=?').run(lastUid, uidValidity, id)
+}
+
 export function updateAccountSyncState(
   id: number,
   state: { lastUid?: number; uidValidity?: string | null; lastCheckAt?: number; lastOkAt?: number }
@@ -620,6 +633,19 @@ export function rulePathSummary(): Array<{ ruleId: number; keyword: string; enab
 
 /** 未命中关键词/类型不符的邮件 UID（补扫重跑用） */
 /** 手动重试「下载失败」的邮件：把状态恢复到 queued，附件重置为 pending，便于重新拉取 */
+/** 找出长时间停在 queued 且附件仍未下载的邮件（软件被关闭/网络中断留下的"处理中"） */
+export function listStuckQueuedMessages(olderThanMs: number): Array<{ id: number; subject: string | null }> {
+  const cutoff = now() - olderThanMs
+  return db()
+    .prepare(
+      `SELECT m.id, m.subject FROM messages m
+       WHERE m.status='queued' AND m.updated_at < ?
+         AND EXISTS (SELECT 1 FROM attachments a WHERE a.message_id=m.id AND a.status IN ('pending','failed'))
+       ORDER BY m.updated_at ASC LIMIT 50`
+    )
+    .all(cutoff) as Array<{ id: number; subject: string | null }>
+}
+
 export function resetMessageForDownloadRetry(messageId: number): { accountId: number; imapUid: number } | null {
   const row = db()
     .prepare('SELECT id, account_id, imap_uid FROM messages WHERE id=?')
@@ -886,6 +912,7 @@ export interface UpsertMessageInput {
   replyStatus?: ReplyStatus
   error?: string | null
   links?: string[] | null
+  mailbox?: string
 }
 
 /** 幂等 upsert：唯一键 (account_id,imap_uid)。返回 id 与是否新插入 */
@@ -899,6 +926,7 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
     d.prepare(
       `UPDATE messages SET
          links=COALESCE(?, links),
+         mailbox=COALESCE(?, mailbox),
          provider_message_id=COALESCE(?, provider_message_id),
          thread_key=COALESCE(?, thread_key),
          rfc_message_id=COALESCE(?, rfc_message_id),
@@ -910,6 +938,7 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
        WHERE id=?`
     ).run(
       input.links ? JSON.stringify(input.links) : null,
+      input.mailbox ?? null,
       input.providerMessageId ?? null,
       input.threadKey ?? null,
       input.rfcMessageId ?? null,
@@ -926,8 +955,8 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
     .prepare(
       `INSERT INTO messages(
          account_id,imap_uid,provider_message_id,thread_key,rfc_message_id,subject,from_addr,from_name,
-         received_at,matched_rule_id,matched_keyword,match_source,status,reply_status,error,links,created_at,updated_at
-       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         received_at,matched_rule_id,matched_keyword,match_source,status,reply_status,error,links,mailbox,created_at,updated_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     .run(
       input.accountId,
@@ -946,6 +975,7 @@ export function upsertMessage(input: UpsertMessageInput): { id: number; inserted
       input.replyStatus ?? 'pending',
       input.error ?? null,
       input.links ? JSON.stringify(input.links) : null,
+      input.mailbox ?? 'INBOX',
       ts,
       ts
     )
@@ -1427,6 +1457,7 @@ function toRecordRow(m: MessageRow, accountEmail: string, attachments: Attachmen
     replyStatus: m.reply_status,
     error: m.error,
     links: safeJsonArray(m.links ?? null, []) as string[],
+    mailbox: m.mailbox ?? 'INBOX',
     attachments: attachments.map((a) => ({
       id: a.id,
       filename: a.filename,
@@ -1514,7 +1545,7 @@ function csvCell(v: unknown): string {
 const STATUS_ZH: Record<MessageStatus, string> = {
   ignored_no_keyword: '未命中关键词',
   ignored_type: '附件类型不符',
-  manual_needed: '超大附件·待手动下载',
+  manual_needed: '超大附件·待下载',
   queued: '处理中',
   partial: '部分成功·待重试',
   done: '已完成',

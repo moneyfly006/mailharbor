@@ -60,9 +60,10 @@ export function Records(): JSX.Element {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [retrying, setRetrying] = useState<string | null>(null)
+  const [webDownloading, setWebDownloading] = useState<number[]>([])
   const [exporting, setExporting] = useState(false)
   // 弱网/大附件：下载超时与自动重试次数（存到设置）
-  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number; extract: boolean } | null>(null)
+  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean } | null>(null)
   const [dlPanelOpen, setDlPanelOpen] = useState(false)
   const [bulkRetrying, setBulkRetrying] = useState(false)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -74,13 +75,17 @@ export function Records(): JSX.Element {
         setDlSettings({
           timeoutSec: Number(s.downloadTimeoutSec ?? 900),
           attempts: Number(s.downloadAttempts ?? 3),
-          extract: s.extractArchives !== false
+          extract: s.extractArchives !== false,
+          chunkMB: Number(s.downloadChunkSizeMB ?? 2),
+          parallel: s.parallelDownload !== false,
+          conn: Number(s.parallelConnections ?? 4),
+          spam: s.scanSpam !== false
         })
       )
-      .catch(() => setDlSettings({ timeoutSec: 900, attempts: 3, extract: true }))
+      .catch(() => setDlSettings({ timeoutSec: 900, attempts: 3, extract: true, chunkMB: 2, parallel: true, conn: 4, spam: true }))
   }, [api])
 
-  const saveDlSettings = async (next: { timeoutSec: number; attempts: number; extract: boolean }): Promise<void> => {
+  const saveDlSettings = async (next: { timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean }): Promise<void> => {
     setDlSettings(next)
     try {
       const s = await api.settings.get()
@@ -88,7 +93,11 @@ export function Records(): JSX.Element {
         ...s,
         downloadTimeoutSec: next.timeoutSec,
         downloadAttempts: next.attempts,
-        extractArchives: next.extract
+        extractArchives: next.extract,
+        downloadChunkSizeMB: next.chunkMB,
+        parallelDownload: next.parallel,
+        parallelConnections: next.conn,
+        scanSpam: next.spam
       })
       pushToast('success', '下载设置已保存', `超时 ${Math.round(next.timeoutSec / 60)} 分钟 · 自动重试 ${next.attempts} 次`)
     } catch (e) {
@@ -324,6 +333,52 @@ export function Records(): JSX.Element {
             </select>
           </div>
           <div className="dls-item">
+            <span className="dls-lbl">垃圾邮件文件夹</span>
+            <select
+              className="dls-select"
+              value={dlSettings.spam ? 'on' : 'off'}
+              aria-label="是否同时扫描垃圾邮件文件夹"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, spam: e.target.value === 'on' })}
+            >
+              <option value="on">同时扫描（推荐）</option>
+              <option value="off">只扫收件箱</option>
+            </select>
+          </div>
+          <div className="dls-item">
+            <span className="dls-lbl">多连接并行</span>
+            <select
+              className="dls-select"
+              value={dlSettings.parallel ? String(dlSettings.conn) : 'off'}
+              aria-label="多连接并行下载"
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === 'off') void saveDlSettings({ ...dlSettings, parallel: false })
+                else void saveDlSettings({ ...dlSettings, parallel: true, conn: Number(v) })
+              }}
+            >
+              <option value="off">关闭（单连接）</option>
+              <option value={2}>2 连接</option>
+              <option value={4}>4 连接（推荐）</option>
+              <option value={6}>6 连接</option>
+              <option value={8}>8 连接</option>
+            </select>
+          </div>
+          <div className="dls-item">
+            <span className="dls-lbl">分块大小</span>
+            <select
+              className="dls-select"
+              value={dlSettings.chunkMB}
+              aria-label="IMAP 分块大小"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, chunkMB: Number(e.target.value) })}
+            >
+              <option value={1}>1 MB</option>
+              <option value={2}>2 MB（推荐）</option>
+              <option value={4}>4 MB</option>
+              <option value={8}>8 MB</option>
+              <option value={16}>16 MB</option>
+            </select>
+          </div>
+          <div className="dls-item">
             <span className="dls-lbl">自动解压 ZIP/RAR</span>
             <select
               className="dls-select"
@@ -353,6 +408,7 @@ export function Records(): JSX.Element {
                   {fmtBytes(d.received)}
                   {d.total > 0 ? ` / ${fmtBytes(d.total)}` : ''}
                   {d.percent != null ? ` · ${d.percent}%` : ''}
+                  {d.bytesPerSec > 0 ? ` · ${fmtBytes(d.bytesPerSec)}/s` : ''}
                 </span>
                 {d.attempt > 1 ? <span className="dlp-retry">第 {d.attempt} 次尝试</span> : null}
               </div>
@@ -570,7 +626,28 @@ export function Records(): JSX.Element {
                         )}
                       </td>
                       <td>
-                        <StatusBadge meta={messageStatusMeta(row.status)} />
+                        {(() => {
+                          const live = downloads.find((d) => d.messageId === row.id)
+                          return (
+                            <div className="status-cell">
+                              <StatusBadge meta={messageStatusMeta(row.status)} />
+                              {row.mailbox && row.mailbox !== 'INBOX' ? (
+                                <span className="mailbox-tag" title="来自垃圾邮件文件夹（不自动回信）">垃圾箱</span>
+                              ) : null}
+                              {row.status === 'queued' ? (
+                                <span className="status-progress mono" title={live?.message ?? ''}>
+                                  {live
+                                    ? live.received > 0
+                                      ? `${fmtBytes(live.received)}${live.total ? ` / ${fmtBytes(live.total)}` : ''}${
+                                          live.percent != null ? ` · ${live.percent}%` : ''
+                                        }`
+                                      : '等待服务器响应…'
+                                    : '下载中…'}
+                                </span>
+                              ) : null}
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td>
                         <div className="row-actions">
@@ -591,26 +668,50 @@ export function Records(): JSX.Element {
                           {row.status === 'manual_needed' ? (
                             <>
                               {row.links.length > 0 ? (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  icon="external"
-                                  title={row.links[0]}
-                                  onClick={() =>
-                                    void api.records.openLink(row.links[0]).then((r) => {
-                                      if (!r.ok) pushToast('warn', '打开链接失败', r.message ?? '请手动复制链接')
-                                    })
-                                  }
-                                >
-                                  打开下载链接
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    icon="download"
+                                    loading={webDownloading.includes(row.id)}
+                                    disabled={retrying === `${row.id}-manual`}
+                                    onClick={() => {
+                                      setWebDownloading((ids) => [...ids, row.id])
+                                      void api.records.downloadLink(row.id).then((r) => {
+                                        if (r.ok) {
+                                          pushToast(r.message ? 'warn' : 'success', '网页文件已归档', r.message ?? `已复制 ${r.archived ?? 0} 份`)
+                                          reload()
+                                          refreshDashboard()
+                                        } else if (r.message !== '已取消') {
+                                          pushToast('warn', '下载或归档未完成', r.message ?? '请重试')
+                                        }
+                                      }).catch((e) => pushToast('error', '网页下载失败', errMsg(e)))
+                                        .finally(() => setWebDownloading((ids) => ids.filter((id) => id !== row.id)))
+                                    }}
+                                  >
+                                    下载并归档
+                                  </Button>
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn--accent"
+                                    aria-label="在系统浏览器打开下载链接"
+                                    title="在系统浏览器打开下载链接"
+                                    onClick={() =>
+                                      void api.records.openLink(row.id).then((r) => {
+                                        if (!r.ok) pushToast('warn', '打开链接失败', r.message)
+                                      })
+                                    }
+                                  >
+                                    <Icon name="external" size={14} />
+                                  </button>
+                                </>
                               ) : null}
-                              <Button
-                                size="sm"
-                                variant="danger"
-                                icon="download"
-                                title="从超大附件/网盘下载好后，选择文件归档到规则路径"
-                                loading={retrying === `${row.id}-manual`}
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn--accent"
+                                aria-label="归档已下载的文件"
+                                title="从超大附件/网盘下载好后，点这里选择文件归档（自动解压 + 回信）"
+                                disabled={retrying === `${row.id}-manual` || webDownloading.includes(row.id)}
                                 onClick={() => {
                                   setRetrying(`${row.id}-manual`)
                                   void api.records
@@ -632,8 +733,8 @@ export function Records(): JSX.Element {
                                     .finally(() => setRetrying(null))
                                 }}
                               >
-                                选择文件归档
-                              </Button>
+                                <Icon name="folder" size={14} />
+                              </button>
                             </>
                           ) : null}
                           {/* 下载阶段就失败（大附件/弱网超时）：重新拉取整封邮件 */}

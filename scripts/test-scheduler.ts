@@ -165,7 +165,7 @@ console.log('手动检查 / 增量:')
 await scheduler.checkNow()
 eq('没有新邮件不重复处理', processed.length, 2)
 const okProvider = createdProviders.find((p) => p.cfg.email === okAccount.email)!
-eq('fetchNewMessages 被调用', okProvider.fetchCalls >= 2, true)
+ok('等待后台 fetchNewMessages 被调用', await waitFor(() => okProvider.fetchCalls >= 2))
 ok('provider 已进入 IDLE', !!okProvider.idleCb)
 eq('游标/健康状态变化不重建 provider', createdProviders.filter((p) => p.cfg.email === okAccount.email).length, 1)
 

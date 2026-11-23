@@ -1482,8 +1482,21 @@ textarea.input:focus-within {
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  flex-wrap: nowrap;
+  gap: 4px;
   justify-content: flex-end;
+  min-width: 0;
+}
+
+.row-actions .btn {
+  white-space: nowrap;
+  padding-left: 7px;
+  padding-right: 7px;
+  flex: 0 0 auto;
+}
+
+.row-actions .icon-btn {
+  flex: 0 0 auto;
 }
 
 /* ==========================================================================

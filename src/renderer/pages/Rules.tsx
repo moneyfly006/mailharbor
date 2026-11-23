@@ -230,6 +230,29 @@ export function Rules(): JSX.Element {
   const [pathErrors, setPathErrors] = useState<number[]>([])
   const [discardOpen, setDiscardOpen] = useState(false)
   const afterDiscard = useRef<(() => void) | null>(null)
+  // 标题测试：输入客户邮件标题，看会命中哪条规则（调试「未命中」用）
+  const [subjectProbe, setSubjectProbe] = useState('')
+  const [probingSubject, setProbingSubject] = useState(false)
+  const [probeResult, setProbeResult] = useState<{
+    normalized: string
+    hits: Array<{ ruleId: number; keyword: string; source: 'subject' | 'body' }>
+  } | null>(null)
+
+  const runSubjectProbe = async (): Promise<void> => {
+    if (!subjectProbe.trim()) {
+      setProbeResult(null)
+      return
+    }
+    setProbingSubject(true)
+    try {
+      const r = await api.rules.testSubject(subjectProbe.trim())
+      setProbeResult(r)
+    } catch (e) {
+      pushToast('error', '标题测试失败', errMsg(e))
+    } finally {
+      setProbingSubject(false)
+    }
+  }
 
   const setDirty = (value: boolean): void => {
     dirtyRef.current = value
@@ -750,6 +773,51 @@ export function Rules(): JSX.Element {
   return (
     <>
       {header}
+
+      <section className="card subject-probe" aria-label="标题测试">
+        <div className="sp-main">
+          <div className="sp-title">
+            <Icon name="search" size={13} />
+            <b>标题测试</b>
+            <span className="sp-hint">把客户邮件的标题粘进来，看是否命中规则（用来排查「未命中」）</span>
+          </div>
+          <div className="sp-row">
+            <input
+              className="sp-input"
+              value={subjectProbe}
+              placeholder="例如：原图+手机壳 追加 2 款：POD_ORDER_20511"
+              aria-label="测试邮件标题"
+              onChange={(e) => {
+                setSubjectProbe(e.target.value)
+                setProbeResult(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void runSubjectProbe()
+              }}
+            />
+            <Button size="sm" icon="search" loading={probingSubject} onClick={() => void runSubjectProbe()}>
+              测试
+            </Button>
+          </div>
+          {probeResult ? (
+            <div className="sp-result">
+              <span className="sp-normalized mono" title={probeResult.normalized}>
+                归一化后：{probeResult.normalized || '（空）'}
+              </span>
+              {probeResult.hits.length > 0 ? (
+                <span className="sp-hit">
+                  ✓ 命中：{probeResult.hits.map((h) => `${h.keyword}（${h.source === 'body' ? '正文' : '标题'}）`).join('、')}
+                </span>
+              ) : (
+                <span className="sp-miss">
+                  ✗ 未命中任何启用规则（当前规则：{rules?.filter((r) => r.enabled).map((r) => r.keyword).join('、') || '无'}）
+                </span>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
       <div className="rules-wrap">
         {/* 左：关键词规则列表 */}
         <div className="left-col">

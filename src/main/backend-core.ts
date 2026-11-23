@@ -15,7 +15,7 @@ import * as repos from './repos'
 import type { SecretsCodec } from './repos'
 import { configureRepos } from './repos'
 import { Dispatcher } from './dispatcher'
-import { MailPipeline } from './pipeline'
+import { MailPipeline, type PipelineDeps } from './pipeline'
 import { ReplyService } from './reply-service'
 import { Scheduler, type SchedulerProvider } from './scheduler'
 import {
@@ -26,6 +26,7 @@ import type { TestResultLine } from '@shared/types'
 import { sendReply as smtpSendReply, buildReplyVars, renderTemplate, type ReplyRequest, type SendReplyResult } from './smtp'
 import { setLogLevel } from './log'
 import type { Backend } from './services'
+import { matchRules, normalize, stripSubjectPrefix } from './rule-engine'
 
 export interface BackendCoreDeps {
   db: DB
@@ -33,6 +34,7 @@ export interface BackendCoreDeps {
   codec: SecretsCodec
   getSetting: <T = unknown>(key: string) => T
   tmpDir: string
+  linkedFiles?: PipelineDeps['linkedFiles']
   now?: () => number
   /** 单测注入假 provider（生产不传 → 真实 IMAP/SMTP） */
   createProvider?: (account: import('@shared/types').Account, cfg: ProviderConfig) => SchedulerProvider
@@ -158,6 +160,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     dispatcher,
     replyService,
     tmpDir: deps.tmpDir,
+    linkedFiles: deps.linkedFiles,
     now
   })
   dispatcher.onSettled = (messageId) => pipeline.onDeliveriesSettled(messageId)
@@ -166,7 +169,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     emit,
     getSetting: deps.getSetting,
     pipeline: {
-      process: (account, provider, msg) => pipeline.process(account, provider as never, msg)
+      process: (account, provider, msg, mailbox) => pipeline.process(account, provider as never, msg, mailbox)
     },
     now,
     createProvider: deps.createProvider
@@ -291,6 +294,22 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         emit({ type: 'toast', level: 'success', title: '启动对账完成', body: `认领 ${r.adopted} · 重做 ${r.reset} · 清理临时文件 ${r.tmpCleaned}` })
       }
     },
+    async testSubject(
+      subject: string,
+      body?: string
+    ): Promise<{ normalized: string; hits: Array<{ ruleId: number; keyword: string; source: 'subject' | 'body' }> }> {
+      const rules = repos.listRules().filter((r) => r.enabled)
+      const strategy = deps.getSetting<'all' | 'priority'>('multiRuleStrategy') === 'priority' ? 'priority' : 'all'
+      const hits = matchRules(rules, { subject, body }, strategy)
+      return {
+        normalized: normalize(stripSubjectPrefix(subject)),
+        hits: hits.map((h) => ({
+          ruleId: h.ruleId,
+          keyword: rules.find((r) => r.id === h.ruleId)?.keyword ?? '',
+          source: h.source
+        }))
+      }
+    },
     async archiveManualFiles(
       messageId: number,
       files: string[]
@@ -386,6 +405,20 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     },
     async init(): Promise<void> {
       dispatcher.start()
+      // 上次运行被强行关闭/断网时，邮件会停在「处理中」：启动后标记为失败，让用户能点「重试下载」
+      try {
+        const stuck = repos.listStuckQueuedMessages(5 * 60_000)
+        for (const m of stuck) {
+          repos.updateMessageStatus(
+            m.id,
+            'failed',
+            '上次下载被中断（软件关闭或网络断开）。可点行内「重试下载」重新拉取'
+          )
+        }
+        if (stuck.length > 0) console.log(`[backend] 恢复 ${stuck.length} 封卡在「处理中」的邮件 → 可重试`)
+      } catch {
+        /* ignore */
+      }
       emit({ type: 'dashboard:changed' })
     },
     async dispose(): Promise<void> {

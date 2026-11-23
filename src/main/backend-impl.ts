@@ -8,6 +8,9 @@ import { join } from 'node:path'
 import { openDb, getSetting, encryptSecret, decryptSecret } from './db'
 import { createBackendWith } from './backend-core'
 import type { Backend } from './services'
+import type { MainEvent } from '@shared/types'
+import { qqFileLink } from './qq-web'
+import { downloadLinkedFile } from './link-download'
 
 export function createBackendImpl(ctx: { bus: EventEmitter }): Backend {
   const db = openDb()
@@ -16,6 +19,16 @@ export function createBackendImpl(ctx: { bus: EventEmitter }): Backend {
     bus: ctx.bus,
     codec: { encrypt: encryptSecret, decrypt: decryptSecret },
     getSetting,
-    tmpDir: join(app.getPath('temp'), 'mailharbor')
+    tmpDir: join(app.getPath('temp'), 'mailharbor'),
+    linkedFiles: {
+      supports: (account, url) => account.preset === 'qq' && !!getSetting(`qqWebEnabled:${account.id}`) && qqFileLink(url),
+      download: (accountId, messageId, url, dest) => downloadLinkedFile({
+        accountId,
+        messageId,
+        url,
+        background: { dest, timeoutMs: Math.max(60, Number(getSetting('downloadTimeoutSec')) || 900) * 1000 },
+        onProgress: (progress) => ctx.bus.emit('event', { type: 'download:progress', progress } satisfies MainEvent)
+      })
+    }
   })
 }

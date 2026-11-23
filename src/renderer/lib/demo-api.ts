@@ -79,6 +79,7 @@ function simulateDownloadProgress(): void {
           percent: done ? 100 : Math.round((received / total) * 100),
           state: done ? 'done' : 'active',
           attempt: 1,
+          bytesPerSec: 2.4 * 1024 * 1024,
           updatedAt: Date.now()
         }
       })
@@ -228,6 +229,7 @@ export function createDemoApi(): Api {
           hasCredential
         )
       },
+      qqLogin: async () => ({ ok: false, message: '请在桌面应用登录 QQ 邮箱' }),
       testSaved: async (id) => {
         await delay(520)
         const acc = findAccount(id)
@@ -265,6 +267,13 @@ export function createDemoApi(): Api {
     },
 
     rules: {
+      testSubject: async (subject: string) => {
+        await delay(200)
+        const hits = state.rules
+          .filter((r) => r.enabled && subject.includes(r.keyword))
+          .map((r) => ({ ruleId: r.id, keyword: r.keyword, source: 'subject' as const }))
+        return { normalized: subject.toLowerCase().replace(/\s+/g, ''), hits }
+      },
       list: async () => clone(state.rules).sort((a, b) => a.priority - b.priority),
       create: async (input) => {
         await delay(260)
@@ -390,9 +399,17 @@ export function createDemoApi(): Api {
         const start = (page - 1) * pageSize
         return { total: rows.length, page, pageSize, rows: clone(rows.slice(start, start + pageSize)) }
       },
-      openLink: async (url: string) => {
+    openLink: async (messageId: number) => {
       await delay(120)
-      return { ok: /^https?:/i.test(url), message: /^https?:/i.test(url) ? undefined : '只允许 http(s) 链接' }
+      const rec = state.records.find((r) => r.id === messageId)
+      return rec?.links.length ? { ok: true } : { ok: false, message: '找不到文件下载链接' }
+    },
+    downloadLink: async (messageId: number) => {
+      await delay(900)
+      const rec = state.records.find((r) => r.id === messageId)
+      if (!rec?.links.length) return { ok: false, message: '找不到文件下载链接' }
+      rec.status = 'done'
+      return { ok: true, archived: 2 }
     },
     archiveManual: async (messageId: number) => {
       await delay(900)

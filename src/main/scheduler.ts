@@ -23,12 +23,20 @@ export type Emit = (e: MainEvent) => void
 export interface SchedulerProvider {
   connect(): Promise<SyncState>
   fetchNewMessages(opts: { lastUid: number; uidValidity?: string | null; maxMessages?: number }): Promise<InboundMessage[]>
+  fetchJunkMessages?(opts: {
+    lastUid: number
+    uidValidity?: string | null
+    maxMessages?: number
+  }): Promise<{ messages: InboundMessage[]; uidValidity: string | null }>
+  selectMailbox?(folder: string): Promise<void>
   downloadAttachment(
     uid: number,
     part: InboundAttachment,
     destTmpPath: string,
     onProgress?: (received: number, total: number) => void,
-    timeoutMs?: number
+    timeoutMs?: number,
+    chunkSize?: number,
+    parallel?: { enabled: boolean; connections: number; thresholdBytes: number }
   ): Promise<{ size: number; sha256: string; tmpPath: string }>
   /** 可选：按 UID 精确补扫（新增/启用规则后重跑历史邮件） */
   fetchByUids?(uids: number[]): Promise<InboundMessage[]>
@@ -43,7 +51,8 @@ export interface SchedulerPipeline {
   process(
     account: Account,
     provider: unknown,
-    msg: InboundMessage
+    msg: InboundMessage,
+    mailbox?: string
   ): Promise<{ messageId: number; status: string }>
 }
 
@@ -79,6 +88,9 @@ interface Worker {
   busy: boolean
   idleStarted: boolean
   missingPasswordLogged: boolean
+  /** 垃圾邮件文件夹游标（与 INBOX 游标分开） */
+  spamLastUid: number
+  spamUidValidity: string | null
 }
 
 export class Scheduler {
@@ -225,9 +237,11 @@ export class Scheduler {
     const tasks: Array<Promise<void>> = []
     for (const worker of this.workers.values()) {
       worker.nextAttemptAt = 0
-      tasks.push(this.pollWorker(worker, true))
+      // 同样不阻塞：立即返回，让 UI 保持可用；进度通过事件推送
+      const p = this.pollWorker(worker, true)
+      tasks.push(p)
+      void p.catch((e) => this.log.warn('手动检查异常', e instanceof Error ? e.message : String(e)))
     }
-    await Promise.all(tasks)
     if (wasPaused) {
       // 暂停状态下手动检查：不改变 listening 状态，但连一次后立即断开
       for (const worker of this.workers.values()) {
@@ -260,7 +274,9 @@ export class Scheduler {
           lastPollAt: 0,
           busy: false,
           idleStarted: false,
-          missingPasswordLogged: false
+          missingPasswordLogged: false,
+          spamLastUid: repos.getAccountSpamState(account.id)?.lastUid ?? 0,
+          spamUidValidity: repos.getAccountSpamState(account.id)?.uidValidity ?? null
         })
       }
     }
@@ -294,7 +310,11 @@ export class Scheduler {
         due.push(this.pollWorker(worker))
       }
       if (due.length > 0) {
-        await Promise.all(due)
+        // 关键：不要 await！大附件下载可能持续几分钟到几十分钟，
+        // 一旦 await 整个 tick 会被卡住，其它账户/后续轮询全部停摆（表现为"新邮件不进来"）。
+        for (const task of due) {
+          void task.catch((e) => this.log.warn('轮询异常', e instanceof Error ? e.message : String(e)))
+        }
         this.deps.emit({ type: 'dashboard:changed' })
       }
     } finally {
@@ -454,6 +474,42 @@ export class Scheduler {
           lastCheckAt: this.now(),
           lastOkAt: this.now()
         })
+      }
+
+      // 垃圾邮件文件夹扫描（Gmail 会把 QQ 发来的大附件判垃圾）
+      if (
+        this.deps.getSetting<boolean>('scanSpam') !== false &&
+        typeof provider.fetchJunkMessages === 'function'
+      ) {
+        try {
+          const junk = await provider.fetchJunkMessages({
+            lastUid: worker.spamLastUid,
+            uidValidity: worker.spamUidValidity,
+            maxMessages: 20
+          })
+          worker.spamUidValidity = junk.uidValidity
+          if (junk.messages.length > 0) {
+            this.log.info(`垃圾邮件中发现 ${junk.messages.length} 封，按规则处理（不自动回信）`)
+          }
+          for (const msg of junk.messages) {
+            try {
+              await this.deps.pipeline.process(repos.getAccount(accountId) ?? account, provider, msg, 'Junk')
+            } catch (e) {
+              this.log.warn(`处理垃圾邮件 UID=${msg.uid} 失败`, e instanceof Error ? e.message : String(e))
+            }
+            if (msg.uid > worker.spamLastUid) worker.spamLastUid = msg.uid
+          }
+          repos.updateAccountSpamState(accountId, worker.spamLastUid, worker.spamUidValidity)
+        } catch (e) {
+          this.log.warn('垃圾邮件扫描异常', e instanceof Error ? e.message : String(e))
+        } finally {
+          // 无论成功失败都切回 INBOX，保证后续轮询/IDLE 正常
+          try {
+            await provider.selectMailbox?.('INBOX')
+          } catch {
+            /* ignore */
+          }
+        }
       }
 
       worker.failures = 0

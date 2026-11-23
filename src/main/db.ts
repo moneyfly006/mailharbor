@@ -44,6 +44,15 @@ function migrate(database: ReturnType<typeof openSqlite>): void {
     if (!cols('messages').includes('links')) {
       database.exec('ALTER TABLE messages ADD COLUMN links TEXT')
     }
+    if (!cols('messages').includes('mailbox')) {
+      database.exec("ALTER TABLE messages ADD COLUMN mailbox TEXT NOT NULL DEFAULT 'INBOX'")
+    }
+    if (!cols('accounts').includes('spam_last_uid')) {
+      database.exec('ALTER TABLE accounts ADD COLUMN spam_last_uid INTEGER NOT NULL DEFAULT 0')
+    }
+    if (!cols('accounts').includes('spam_uid_validity')) {
+      database.exec('ALTER TABLE accounts ADD COLUMN spam_uid_validity TEXT')
+    }
   } catch {
     /* 迁移失败不阻塞启动（旧库仍可用，只是没有该开关） */
   }
@@ -108,6 +117,11 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   retryMaxAttempts: 8,
   downloadAttempts: 3,
   downloadTimeoutSec: 900,
+  downloadChunkSizeMB: 2,
+  scanSpam: true,
+  parallelDownload: true,
+  parallelConnections: 4,
+  parallelThresholdMB: 6,
   extractArchives: true,
   multiRuleStrategy: 'all'
 }

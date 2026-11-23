@@ -142,7 +142,7 @@ export interface RuleMatch {
 export type MessageStatus =
   | 'ignored_no_keyword'
   | 'ignored_type'
-  /** 超大附件/网盘链接邮件：邮件里只有下载链接，需用户手动下载后归档 */
+  /** 超大附件/网盘链接邮件：等待从网页下载文件 */
   | 'manual_needed'
   | 'queued'
   | 'partial'
@@ -184,6 +184,8 @@ export interface RecordRow {
   error: string | null
   /** 邮件正文里提取到的下载链接（超大附件/网盘） */
   links: string[]
+  /** 邮件所在文件夹：INBOX / Junk（垃圾邮件） */
+  mailbox: string
   attachments: Array<{
     id: number
     filename: string
@@ -265,6 +267,8 @@ export interface DownloadProgress {
   state: 'active' | 'done' | 'failed'
   /** 第几次尝试（从 1 开始） */
   attempt: number
+  /** 实时速度（字节/秒，0=未知） */
+  bytesPerSec: number
   message?: string
   updatedAt: number
 }
@@ -324,6 +328,16 @@ export interface Settings {
   downloadAttempts: number
   /** 单个附件下载超时（秒），大附件/弱网可调到 1800 */
   downloadTimeoutSec: number
+  /** IMAP 分块大小（MB）：越大越少往返，高延迟链路提速明显 */
+  downloadChunkSizeMB: number
+  /** 同时扫描垃圾邮件文件夹（Gmail 常把 QQ 发来的大附件邮件判为垃圾） */
+  scanSpam: boolean
+  /** 多连接并行下载（把整封邮件切段，在 N 条连接上同时取，再本地解析附件） */
+  parallelDownload: boolean
+  /** 并行连接数（2-8，默认 4） */
+  parallelConnections: number
+  /** 超过多少 MB 才用并行下载（默认 6MB） */
+  parallelThresholdMB: number
   /** ZIP/RAR 落盘后自动解压到同一文件夹（保留压缩包） */
   extractArchives: boolean
   /** 网络代理（国内访问 Gmail 必须；默认跟随系统） */

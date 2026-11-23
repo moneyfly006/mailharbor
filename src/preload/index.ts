@@ -15,6 +15,7 @@ const api: Api = {
     remove: (id) => invoke(IPC.accountDelete, id),
     test: (input) => invoke(IPC.accountTest, input),
     testSaved: (id) => invoke(IPC.accountTestSaved, id),
+    qqLogin: (id) => invoke(IPC.accountQqLogin, id),
     toggle: (id, enabled) => invoke(IPC.accountToggle, id, enabled)
   },
   rules: {
@@ -24,14 +25,16 @@ const api: Api = {
     remove: (id) => invoke(IPC.ruleDelete, id),
     toggle: (id, enabled) => invoke(IPC.ruleToggle, id, enabled),
     reorder: (ids) => invoke(IPC.ruleReorder, ids),
-    targetsHealth: () => invoke(IPC.ruleTargetsHealth)
+    targetsHealth: () => invoke(IPC.ruleTargetsHealth),
+    testSubject: (subject, body) => invoke(IPC.rulesTestSubject, subject, body)
   },
   records: {
     list: (q) => invoke(IPC.recordsList, q),
     retry: (messageId, deliveryId) => invoke(IPC.recordsRetry, messageId, deliveryId),
     retryDownload: (messageId) => invoke(IPC.recordsRetryDownload, messageId),
     reprocess: (messageId) => invoke(IPC.recordsReprocess, messageId),
-    openLink: (url) => invoke(IPC.recordsOpenLink, url),
+    openLink: (messageId) => invoke(IPC.recordsOpenLink, messageId),
+    downloadLink: (messageId) => invoke(IPC.recordsDownloadLink, messageId),
     archiveManual: (messageId) => invoke(IPC.recordsArchiveManual, messageId),
     openFolder: (messageId, deliveryId) => invoke(IPC.recordsOpenFolder, messageId, deliveryId),
     exportCsv: (q) => invoke(IPC.recordsExport, q),

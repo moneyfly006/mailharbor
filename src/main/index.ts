@@ -34,6 +34,10 @@ function broadcast(e: MainEvent): void {
 
 async function bootstrap(): Promise<void> {
   await app.whenReady()
+
+  // 产品曾用名 MailHarbor：老用户的数据目录是 %APPDATA%\MailHarbor，
+  // 改名后 userData 变成「邮箱资料助手」，这里把老库迁移过来，避免"看不到之前的记录"。
+  migrateLegacyUserData()
   ;(globalThis as Record<string, unknown>).__mhStartedAt = Date.now()
 
   openDb()
@@ -135,6 +139,38 @@ async function runSelfCheck(outPath: string): Promise<void> {
     const { writeFileSync } = await import('node:fs')
     writeFileSync(outPath, JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }, null, 2), 'utf8')
     console.error('[self-check] 失败', e)
+  }
+}
+
+function migrateLegacyUserData(): void {
+  try {
+    const { join } = require('node:path') as typeof import('node:path')
+    const { copyFileSync, existsSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
+    const appData = app.getPath('appData')
+    const current = app.getPath('userData')
+    const legacyNames = ['MailHarbor', 'mailharbor']
+    const currentDb = join(current, 'mailharbor.db')
+    if (existsSync(currentDb)) return
+    for (const name of legacyNames) {
+      const legacy = join(appData, name)
+      const legacyDb = join(legacy, 'mailharbor.db')
+      if (!existsSync(legacyDb)) continue
+      mkdirSync(current, { recursive: true })
+      for (const f of ['mailharbor.db', 'mailharbor.db-wal', 'mailharbor.db-shm']) {
+        const src = join(legacy, f)
+        if (existsSync(src)) {
+          try {
+            copyFileSync(src, join(current, f))
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      console.log(`[main] 已从旧目录迁移数据：${legacy} → ${current}`)
+      return
+    }
+  } catch {
+    /* 迁移失败不影响启动 */
   }
 }
 

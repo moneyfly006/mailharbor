@@ -12,6 +12,7 @@ export const IPC = {
   accountDelete: 'account:delete',
   accountTest: 'account:test',
   accountTestSaved: 'account:test-saved',
+  accountQqLogin: 'account:qq-login',
   accountToggle: 'account:toggle',
   // 规则
   ruleList: 'rule:list',
@@ -26,7 +27,9 @@ export const IPC = {
   recordsRetry: 'records:retry',
   recordsRetryDownload: 'records:retry-download',
   recordsReprocess: 'records:reprocess',
+  rulesTestSubject: 'rules:test-subject',
   recordsOpenLink: 'records:open-link',
+  recordsDownloadLink: 'records:download-link',
   recordsArchiveManual: 'records:archive-manual',
   recordsOpenFolder: 'records:open-folder',
   recordsExport: 'records:export',
@@ -61,6 +64,7 @@ export interface Api {
     remove(id: number): Promise<void>
     test(input: AccountInput & { id?: number }): Promise<TestResult>
     testSaved(id: number): Promise<TestResult>
+    qqLogin(id: number): Promise<{ ok: boolean; message?: string }>
     toggle(id: number, enabled: boolean): Promise<Account>
   }
   rules: {
@@ -71,6 +75,11 @@ export interface Api {
     toggle(id: number, enabled: boolean): Promise<Rule>
     reorder(ids: number[]): Promise<void>
     targetsHealth(): Promise<Rule[]>
+    /** 标题测试：规则页调试用 */
+    testSubject(
+      subject: string,
+      body?: string
+    ): Promise<{ normalized: string; hits: Array<{ ruleId: number; keyword: string; source: 'subject' | 'body' }> }>
   }
   records: {
     list(q: ListRecordsQuery): Promise<ListRecordsResult>
@@ -80,7 +89,9 @@ export interface Api {
     /** 重新识别（用于修改规则/升级后重扫单封邮件） */
     reprocess(messageId: number): Promise<{ ok: boolean; message?: string }>
     /** 用系统浏览器打开超大附件/网盘链接 */
-    openLink(url: string): Promise<{ ok: boolean; message?: string }>
+    openLink(messageId: number): Promise<{ ok: boolean; message?: string }>
+    /** 在应用内打开下载页，取得实际网页文件后归档 */
+    downloadLink(messageId: number): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }>
     /** 选择手动下载好的文件并归档到规则路径 */
     archiveManual(
       messageId: number
