@@ -618,6 +618,18 @@ export function rulePathSummary(): Array<{ ruleId: number; keyword: string; enab
 }
 
 /** 未命中关键词/类型不符的邮件 UID（补扫重跑用） */
+/** 手动重试「下载失败」的邮件：把状态恢复到 queued，附件重置为 pending，便于重新拉取 */
+export function resetMessageForDownloadRetry(messageId: number): { accountId: number; imapUid: number } | null {
+  const row = db()
+    .prepare('SELECT id, account_id, imap_uid FROM messages WHERE id=?')
+    .get(messageId) as { id: number; account_id: number; imap_uid: number } | undefined
+  if (!row) return null
+  const ts = now()
+  db().prepare("UPDATE messages SET status='queued', error=NULL, reply_status='pending', updated_at=? WHERE id=?").run(ts, messageId)
+  db().prepare("UPDATE attachments SET status='pending', error=NULL, updated_at=? WHERE message_id=?").run(ts, messageId)
+  return { accountId: row.account_id, imapUid: row.imap_uid }
+}
+
 export function listIgnoredMessageUids(accountId: number, limit = 200): number[] {
   const rows = db()
     .prepare(
@@ -679,7 +691,7 @@ function mapRule(r: RuleRow): Rule {
     scope: r.scope,
     mode: r.mode,
     priority: r.priority,
-    fileTypes: safeJsonArray(r.file_types, ['zip', 'tif', 'tiff']),
+    fileTypes: safeJsonArray(r.file_types, ['zip', 'rar', 'tif', 'tiff']),
     autoReply: bool(r.auto_reply),
     hitMessages: r.hit_messages,
     hitFiles: r.hit_files,

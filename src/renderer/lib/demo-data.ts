@@ -151,7 +151,7 @@ export const DEMO_ACCOUNTS: Account[] = [
 // ---------------------------------------------------------------------------
 // 规则（6 条：4 启用 / 2 停用；一条多路径，含空间不足与路径不可用）
 // ---------------------------------------------------------------------------
-const FILE_TYPES = ['zip', 'tif', 'tiff', 'jpg', 'png', 'pdf']
+const FILE_TYPES = ['zip', 'rar', 'tif', 'tiff', 'jpg', 'png', 'pdf']
 
 function target(
   id: number,
@@ -732,6 +732,8 @@ export const DEMO_SETTINGS: Settings = {
   replyLanguage: 'en',
   logLevel: 'info',
   retryMaxAttempts: 3,
+  downloadAttempts: 3,
+  downloadTimeoutSec: 900,
   multiRuleStrategy: 'all'
 }
 

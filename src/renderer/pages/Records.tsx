@@ -48,7 +48,7 @@ function buildPages(current: number, total: number): Array<number | '…'> {
 }
 
 export function Records(): JSX.Element {
-  const { api, pushToast, refreshDashboard, refresh, bump } = useApp()
+  const { api, pushToast, refreshDashboard, refresh, bump, downloads, retryDownload } = useApp()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [result, setResult] = useState<ListRecordsResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,7 +61,29 @@ export function Records(): JSX.Element {
   const [pageSize, setPageSize] = useState(50)
   const [retrying, setRetrying] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  // 弱网/大附件：下载超时与自动重试次数（存到设置）
+  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number } | null>(null)
+  const [dlPanelOpen, setDlPanelOpen] = useState(false)
+  const [bulkRetrying, setBulkRetrying] = useState(false)
   const searchRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    void api.settings
+      .get()
+      .then((s) => setDlSettings({ timeoutSec: Number(s.downloadTimeoutSec ?? 900), attempts: Number(s.downloadAttempts ?? 3) }))
+      .catch(() => setDlSettings({ timeoutSec: 900, attempts: 3 }))
+  }, [api])
+
+  const saveDlSettings = async (next: { timeoutSec: number; attempts: number }): Promise<void> => {
+    setDlSettings(next)
+    try {
+      const s = await api.settings.get()
+      await api.settings.save({ ...s, downloadTimeoutSec: next.timeoutSec, downloadAttempts: next.attempts })
+      pushToast('success', '下载设置已保存', `超时 ${Math.round(next.timeoutSec / 60)} 分钟 · 自动重试 ${next.attempts} 次`)
+    } catch (e) {
+      pushToast('error', '保存失败', errMsg(e))
+    }
+  }
 
   useEffect(() => {
     void api.accounts
@@ -170,6 +192,32 @@ export function Records(): JSX.Element {
   }
 
   const rows = result?.rows ?? []
+
+  /** 下载阶段就失败（没有可重试的失败路径）的邮件：用「重试下载」重新拉取 */
+  const failedDownloadRows = rows.filter(
+    (r) =>
+      r.status === 'failed' &&
+      !r.attachments.some((a) => a.deliveries.some((d) => d.state === 'failed' || d.state === 'retry_wait'))
+  )
+
+  const retryAllFailedDownloads = async (): Promise<void> => {
+    if (failedDownloadRows.length === 0) return
+    setBulkRetrying(true)
+    let ok = 0
+    try {
+      for (const r of failedDownloadRows) {
+        const res = await api.records.retryDownload(r.id)
+        if (res.ok) ok += 1
+      }
+      pushToast(ok > 0 ? 'success' : 'warn', `已重新下载 ${ok} / ${failedDownloadRows.length} 封`, '下载完成后会自动归档并回信')
+      reload()
+      refreshDashboard()
+    } catch (e) {
+      pushToast('error', '批量重试失败', errMsg(e))
+    } finally {
+      setBulkRetrying(false)
+    }
+  }
   const total = result?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const hasFilters = status !== 'all' || accountId !== 'all' || search.trim() !== ''
@@ -198,6 +246,26 @@ export function Records(): JSX.Element {
       sub="每封邮件、每条目标路径的结果都留痕。哪条路径失败就只重试哪条。"
       actions={
         <>
+          {failedDownloadRows.length > 0 ? (
+            <Button
+              size="sm"
+              variant="danger"
+              icon="download"
+              loading={bulkRetrying}
+              onClick={() => void retryAllFailedDownloads()}
+            >
+              重试失败下载（{failedDownloadRows.length}）
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            icon="sliders"
+            variant={dlPanelOpen ? 'primary' : 'secondary'}
+            onClick={() => setDlPanelOpen((v) => !v)}
+            title="大附件 / 弱网：可调下载超时与自动重试次数"
+          >
+            下载设置
+          </Button>
           <Button size="sm" icon="refresh" disabled={loading} onClick={() => reload()}>
             刷新
           </Button>
@@ -212,6 +280,66 @@ export function Records(): JSX.Element {
   return (
     <>
       {header}
+
+      {dlPanelOpen && dlSettings ? (
+        <section className="dl-settings" aria-label="下载设置">
+          <div className="dls-item">
+            <span className="dls-lbl">单个附件超时</span>
+            <select
+              className="dls-select"
+              value={dlSettings.timeoutSec}
+              aria-label="单个附件下载超时"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, timeoutSec: Number(e.target.value) })}
+            >
+              <option value={300}>5 分钟</option>
+              <option value={600}>10 分钟</option>
+              <option value={900}>15 分钟（推荐）</option>
+              <option value={1800}>30 分钟</option>
+              <option value={3600}>60 分钟</option>
+            </select>
+          </div>
+          <div className="dls-item">
+            <span className="dls-lbl">失败自动重试</span>
+            <select
+              className="dls-select"
+              value={dlSettings.attempts}
+              aria-label="附件下载失败自动重试次数"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, attempts: Number(e.target.value) })}
+            >
+              <option value={1}>1 次</option>
+              <option value={2}>2 次</option>
+              <option value={3}>3 次（推荐）</option>
+              <option value={5}>5 次</option>
+            </select>
+          </div>
+          <div className="dls-hint">
+            <Icon name="alert" size={12} />
+            <span>网络慢时把超时调到 30–60 分钟；失败后也可在下方记录里点「重试下载」手动再拉一次。</span>
+          </div>
+        </section>
+      ) : null}
+
+      {downloads.length > 0 ? (
+        <section className="dl-progress" aria-label="附件下载进度">
+          {downloads.map((d) => (
+            <div className="dlp-item" key={d.attachmentId}>
+              <div className="dlp-head">
+                <Icon name="download" size={13} />
+                <span className="dlp-name" title={d.filename}>{d.filename}</span>
+                <span className="dlp-stat mono">
+                  {fmtBytes(d.received)}
+                  {d.total > 0 ? ` / ${fmtBytes(d.total)}` : ''}
+                  {d.percent != null ? ` · ${d.percent}%` : ''}
+                </span>
+                {d.attempt > 1 ? <span className="dlp-retry">第 {d.attempt} 次尝试</span> : null}
+              </div>
+              <div className="dlp-bar" role="progressbar" aria-valuenow={d.percent ?? 0} aria-valuemin={0} aria-valuemax={100}>
+                <i style={{ width: `${d.percent ?? (d.received > 0 ? 8 : 3)}%` }} />
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {/* 筛选条 */}
       <div className="card filters">
@@ -435,6 +563,21 @@ export function Records(): JSX.Element {
                               }
                             >
                               重试 {primaryFail.drive}
+                            </Button>
+                          ) : null}
+                          {/* 下载阶段就失败（大附件/弱网超时）：重新拉取整封邮件 */}
+                          {!primaryFail && row.status === 'failed' ? (
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              icon="download"
+                              loading={retrying === `${row.id}-download`}
+                              onClick={() => {
+                                setRetrying(`${row.id}-download`)
+                                void retryDownload(row.id).finally(() => setRetrying(null))
+                              }}
+                            >
+                              重试下载
                             </Button>
                           ) : null}
                           {savedDelivery ? (

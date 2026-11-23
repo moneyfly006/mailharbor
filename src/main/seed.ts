@@ -37,7 +37,7 @@ export function seedDefaultRulesIfEmpty(): number {
         scope: 'subject',
         mode: 'exact',
         priority,
-        fileTypes: ['zip', 'tif', 'tiff', 'jpg', 'jpeg', 'png', 'pdf'],
+        fileTypes: ['zip', 'rar', 'tif', 'tiff', 'jpg', 'jpeg', 'png', 'pdf'],
         autoReply: true,
         targets: seed.paths.map((path) => ({ path, required: true }))
       })

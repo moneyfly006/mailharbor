@@ -29,6 +29,7 @@ const api: Api = {
   records: {
     list: (q) => invoke(IPC.recordsList, q),
     retry: (messageId, deliveryId) => invoke(IPC.recordsRetry, messageId, deliveryId),
+    retryDownload: (messageId) => invoke(IPC.recordsRetryDownload, messageId),
     openFolder: (messageId, deliveryId) => invoke(IPC.recordsOpenFolder, messageId, deliveryId),
     exportCsv: (q) => invoke(IPC.recordsExport, q),
     clear: () => invoke(IPC.recordsClear)

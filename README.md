@@ -7,8 +7,8 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 最新版本 | v0.1.11（自动更新已启用） |
-| 安装包 | [MailHarbor-Setup-0.1.11.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
+| 最新版本 | v0.1.12（自动更新已启用） |
+| 安装包 | [MailHarbor-Setup-0.1.12.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
 | macOS | [dmg / zip](https://github.com/moneyfly006/mailharbor/releases/latest)（arm64 + x64） |
 | 设计说明书 | [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-Design-Spec.pdf)（6 屏高保真设计图） |
 | **配置说明书** | [docs/邮箱资料助手-配置说明书.pdf](docs/邮箱资料助手-配置说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-User-Manual.pdf)（安装→配邮箱→配规则→配回信→日常使用，21 页） |
@@ -17,6 +17,14 @@
 **安装路径可以自己选**：安装包是多步向导（不是一键静默装），会出现「选择安装位置」这一步，默认装在
 `%LOCALAPPDATA%\Programs\邮箱资料助手`（按当前用户安装，**不需要管理员权限**），你可以改成 `D:\软件\邮箱资料助手` 等任意目录。
 装完桌面会生成「**邮箱资料助手**」快捷方式（朱红信封图标），开始菜单同名入口；卸载时会保留邮件记录与配置。
+
+## 大附件 / 弱网（v0.1.12 起）
+
+- **实时下载进度**：「下载记录」页顶部显示文件名、已下载/总大小、百分比、第几次尝试
+- **自动重试**：默认 3 次（可在「下载记录 → 下载设置」改），每次重新拉取
+- **超时可调**：默认 15 分钟，可选 30 / 60 分钟
+- **手动二次下载**：失败行「重试下载」，或右上角「重试失败下载（N）」一键全部重拉
+- **RAR 支持**：附件白名单新增 `.rar`（原样落盘，不解压）
 
 ## 文档
 

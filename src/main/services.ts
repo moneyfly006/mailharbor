@@ -27,6 +27,8 @@ export interface Backend {
   reconcile(): Promise<void> | void
   /** 用第一个启用账户的 SMTP 发一封测试信（自动回复页「发送测试信」用） */
   testReply(to: string): Promise<{ ok: boolean; message: string; providerMessageId?: string }>
+  /** 重新下载并归档指定邮件（用于「下载失败」后手动重试） */
+  retryDownload(messageId: number): Promise<{ ok: boolean; message?: string }>
   /** 重试指定邮件的失败投递（deliveryId 省略=全部失败项） */
   retryMessage(messageId: number, deliveryId?: number): Promise<void>
   /** 应用启动时调用一次 */

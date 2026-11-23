@@ -103,6 +103,8 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   proxy: { mode: 'system', host: '127.0.0.1', port: 7890 },
   replyAccountId: null,
   retryMaxAttempts: 8,
+  downloadAttempts: 3,
+  downloadTimeoutSec: 900,
   multiRuleStrategy: 'all'
 }
 

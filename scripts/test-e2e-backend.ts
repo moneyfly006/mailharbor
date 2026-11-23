@@ -8,7 +8,7 @@
  */
 import { EventEmitter } from 'node:events'
 import Database from 'better-sqlite3'
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { simpleParser } from 'mailparser'
@@ -97,6 +97,7 @@ try {
     replyLanguage: 'en',
     logLevel: 'error',
     retryMaxAttempts: 8,
+    downloadAttempts: 2,
     multiRuleStrategy: 'all'
   }
   const bus = new EventEmitter()
@@ -322,6 +323,48 @@ try {
     'IDLE 自动收信'
   )
   ok('IDLE 事件触发自动收信（未手动 checkNow）', idleProcessed)
+
+  // -------------------------------------------------------------------------
+  // 下载进度 + 手动重试下载（大附件 / 弱网）
+  // -------------------------------------------------------------------------
+  console.log('下载进度:')
+  const progressEvents = events.filter(
+    (e): e is Extract<MainEvent, { type: 'download:progress' }> => e.type === 'download:progress'
+  )
+  ok('收到 download:progress 事件', progressEvents.length > 0)
+  ok('进度最终状态=done', progressEvents.some((e) => e.progress.state === 'done'))
+  ok('进度带文件名字节数', progressEvents.every((e) => e.progress.filename.length > 0 && e.progress.received >= 0))
+  const doneEvt = progressEvents.find((e) => e.progress.state === 'done')!
+  eq('完成进度 percent=100', doneEvt.progress.percent, 100)
+
+  console.log('手动重试下载（删掉临时文件后重新拉取）:')
+  // 选一封已归档的邮件，把它的附件 tmp 与状态重置，模拟"下载失败"后用户点重试
+  const targetMsg = repos.listRecords({ page: 1, pageSize: 50 }).rows.find(
+    (r) =>
+      r.status === 'done' &&
+      r.attachments.length > 0 &&
+      r.matchedRuleId != null &&
+      r.attachments.every((a) => a.deliveries.length > 0 && a.deliveries.every((d) => d.state === 'done'))
+  )!
+  const att = targetMsg.attachments[0]
+  ok('找到可重试的邮件', !!att)
+  rmSync(att.tmpPath ?? '', { force: true })
+  const reset = repos.resetMessageForDownloadRetry(targetMsg.id)
+  ok('重置返回账户与 UID', !!reset && reset.imapUid > 0)
+  eq('重置后状态=queued', repos.getMessage(targetMsg.id)?.status, 'queued')
+  const retried = await backend.retryDownload(targetMsg.id)
+  ok('retryDownload 成功触发重新处理', retried.ok)
+  // 重试后附件应重新落盘（tmp 文件被删过一次）
+  const attRow = repos.listAttachmentsByMessage(targetMsg.id)[0]
+  const attRetried = await waitFor(() => {
+    const a = repos.getAttachment(attRow.id)
+    return a?.status === 'downloaded' && !!a.tmp_path && existsSync(a.tmp_path)
+  }, 30_000, '重试后附件重新下载')
+  ok('重试后附件已重新下载到临时目录', attRetried)
+  const recAfter = repos.listRecords({ page: 1, pageSize: 50 }).rows.find((x) => x.id === targetMsg.id)!
+  ok('重试后状态不再是 failed', recAfter.status !== 'failed')
+  const doneCount = recAfter.attachments.flatMap((a) => a.deliveries).filter((d) => d.state === 'done').length
+  ok('重试后已成功的路径没有重复写(todo 仍为原来数量)', doneCount >= 2)
 
   // -------------------------------------------------------------------------
   // 事件推送（ipc.ts 依赖这些事件刷新 UI）

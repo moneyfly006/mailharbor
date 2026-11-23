@@ -11,6 +11,8 @@ import { isAllowedAttachment, matchRules } from './rule-engine'
 import { pathExists, sanitizeFilename } from './file-writer'
 import type { InboundAttachment, InboundMessage } from './providers/imap'
 import { createLogger, type Logger } from './log'
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 import { join } from 'node:path'
 
 export type Emit = (e: MainEvent) => void
@@ -20,7 +22,9 @@ export interface AttachmentDownloader {
   downloadAttachment(
     uid: number,
     part: InboundAttachment,
-    destTmpPath: string
+    destTmpPath: string,
+    onProgress?: (received: number, total: number) => void,
+    timeoutMs?: number
   ): Promise<{ size: number; sha256: string; tmpPath: string }>
 }
 
@@ -50,7 +54,7 @@ export interface ProcessOutcome {
   skipped: boolean
 }
 
-export const DEFAULT_FALLBACK_TYPES = ['zip', 'tif', 'tiff']
+export const DEFAULT_FALLBACK_TYPES = ['zip', 'rar', 'tif', 'tiff']
 
 export class MailPipeline {
   private deps: PipelineDeps
@@ -77,9 +81,11 @@ export class MailPipeline {
       skipped
     })
 
-    // 已处理过的邮件（UID 重扫 / 重启）：忽略状态可重试，其余跳过，保证不重复下载/回信
+    // 已处理过的邮件（UID 重扫 / 重启）：忽略状态与 queued 可重试，其余跳过，保证不重复下载/回信
+    // queued 表示"处理中断/用户手动重试下载"，需要重新走一遍
     const existing = repos.getMessageByUid(account.id, msg.uid)
-    if (existing && existing.status !== 'ignored_no_keyword' && existing.status !== 'ignored_type') {
+    const reprocessable: MessageStatus[] = ['ignored_no_keyword', 'ignored_type', 'queued']
+    if (existing && !reprocessable.includes(existing.status)) {
       this.log.debug(`邮件 UID=${msg.uid} 已处理过（#${existing.id} ${existing.status}），跳过`)
       return fallbackOutcome(existing.id, existing.status, true)
     }
@@ -251,25 +257,88 @@ export class MailPipeline {
         this.deps.tmpDir,
         `${account.id}-${account.uidValidity ?? 'na'}-${msg.uid}-${safePart}.part`
       )
-      try {
-        const res = await provider.downloadAttachment(msg.uid, part, dest)
-        repos.setAttachmentDownloaded(row.id, { tmpPath: res.tmpPath || dest, size: res.size, sha256: res.sha256 })
-        out.push({ attachmentId: row.id, part })
-        this.log.info(`附件已下载：${part.filename}（${Math.round(res.size / 1024)}KB）`)
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e)
-        const code = (e as { code?: string }).code ?? 'DOWNLOAD_FAILED'
+      // 弱网/大附件：自动重试若干次（每次重新发 FETCH，进度从 0 开始）
+      const maxAttempts = Math.max(1, Number(this.setting<number>('downloadAttempts') ?? 3))
+      const timeoutMs = Math.max(60, Number(this.setting<number>('downloadTimeoutSec') ?? 900)) * 1000
+      let res: { size: number; sha256: string; tmpPath: string } | null = null
+      let lastErr: { message: string; code: string } | null = null
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const emitProgress = (received: number, total: number): void => {
+          const pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : null
+          this.deps.emit({
+            type: 'download:progress',
+            progress: {
+              messageId,
+              attachmentId: row.id,
+              filename: part.filename,
+              received,
+              total,
+              percent: pct,
+              state: 'active',
+              attempt,
+              updatedAt: Date.now()
+            }
+          })
+        }
+        try {
+          res = await provider.downloadAttachment(msg.uid, part, dest, emitProgress, timeoutMs)
+          lastErr = null
+          break
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e)
+          lastErr = { message, code: (e as { code?: string }).code ?? 'DOWNLOAD_FAILED' }
+          this.log.warn(`附件下载失败（第 ${attempt}/${maxAttempts} 次）#${messageId} ${part.filename}：${message}`)
+          this.deps.emit({
+            type: 'download:progress',
+            progress: {
+              messageId,
+              attachmentId: row.id,
+              filename: part.filename,
+              received: 0,
+              total: Math.max(0, Number(part.size) || 0),
+              percent: null,
+              state: attempt >= maxAttempts ? 'failed' : 'active',
+              attempt,
+              message,
+              updatedAt: Date.now()
+            }
+          })
+          if (attempt < maxAttempts) await sleep(1500 * attempt)
+        }
+      }
+
+      if (!res) {
+        const message = lastErr?.message ?? '下载失败'
+        const code = lastErr?.code ?? 'DOWNLOAD_FAILED'
         repos.setAttachmentStatus(row.id, 'failed', message)
         repos.updateMessageStatus(messageId, 'failed', `[${code}] ${message}`)
         this.log.error(`附件下载失败 #${messageId} ${part.filename} [${code}]`, message)
         this.deps.emit({
           type: 'toast',
           level: 'error',
-          title: '附件下载失败，邮件未归档',
+          title: '附件下载失败，可在「下载记录」点「重试下载」',
           body: `${part.filename}：${message}`
         })
         return null
       }
+
+      repos.setAttachmentDownloaded(row.id, { tmpPath: res.tmpPath || dest, size: res.size, sha256: res.sha256 })
+      out.push({ attachmentId: row.id, part })
+      this.deps.emit({
+        type: 'download:progress',
+        progress: {
+          messageId,
+          attachmentId: row.id,
+          filename: part.filename,
+          received: res.size,
+          total: res.size,
+          percent: 100,
+          state: 'done',
+          attempt: 1,
+          updatedAt: Date.now()
+        }
+      })
+      this.log.info(`附件已下载：${part.filename}（${Math.round(res.size / 1024)}KB）`)
     }
     return out
   }

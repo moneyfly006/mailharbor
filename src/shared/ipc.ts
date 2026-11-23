@@ -24,6 +24,7 @@ export const IPC = {
   // 记录
   recordsList: 'records:list',
   recordsRetry: 'records:retry',
+  recordsRetryDownload: 'records:retry-download',
   recordsOpenFolder: 'records:open-folder',
   recordsExport: 'records:export',
   recordsClear: 'records:clear',
@@ -71,6 +72,8 @@ export interface Api {
   records: {
     list(q: ListRecordsQuery): Promise<ListRecordsResult>
     retry(messageId: number, deliveryId?: number): Promise<void>
+    /** 重新下载并归档（下载失败后重试用） */
+    retryDownload(messageId: number): Promise<{ ok: boolean; message?: string }>
     openFolder(messageId: number, deliveryId?: number): Promise<void>
     exportCsv(q: ListRecordsQuery): Promise<{ path: string } | null>
     clear(): Promise<void>

@@ -179,6 +179,16 @@ export function registerIpc(context: IpcContext): void {
     } catch (e) { fail(e) }
   })
 
+  ipcMain.handle(IPC.recordsRetryDownload, async (_e, messageId: number): Promise<{ ok: boolean; message?: string }> => {
+    try {
+      const r = await requireBackend().retryDownload(messageId)
+      ctx?.broadcast({ type: 'dashboard:changed' })
+      return r
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
   ipcMain.handle(IPC.recordsOpenFolder, async (_e, messageId: number, deliveryId?: number): Promise<void> => {
     const dir = repos.folderOfRecord(messageId, deliveryId)
     if (!dir) throw new Error('没有可打开的文件夹')

@@ -3,7 +3,7 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type JSX, type ReactNode
 } from 'react'
 import type { Api } from '@shared/ipc'
-import type { DashboardData } from '@shared/types'
+import type { DashboardData, DownloadProgress } from '@shared/types'
 import { getApi, isDemoMode } from '../lib/api'
 import { errMsg } from '../lib/format'
 import type { ToastItem, ToastLevel } from '../components/Toast'
@@ -31,6 +31,10 @@ interface AppContextValue {
   bump: (key: RefreshKey) => void
   rulesCount: number
   toasts: ToastItem[]
+  /** 正在下载的附件（大附件/弱网时给用户看进度） */
+  downloads: DownloadProgress[]
+  /** 手动重试「下载失败」的邮件 */
+  retryDownload: (messageId: number) => Promise<void>
   pushToast: (level: ToastLevel, title: string, body?: string) => void
   dismissToast: (id: number) => void
 }
@@ -47,6 +51,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const [refresh, setRefresh] = useState<Record<RefreshKey, number>>({ accounts: 0, rules: 0, records: 0 })
   const [rulesCount, setRulesCount] = useState(0)
   const [toasts, setToasts] = useState<ToastItem[]>([])
+  const [downloads, setDownloads] = useState<DownloadProgress[]>([])
+  const downloadTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const toastSeq = useRef(0)
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
 
@@ -79,6 +85,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     return () => {
       for (const timer of map.values()) clearTimeout(timer)
       map.clear()
+      for (const timer of downloadTimers.current.values()) clearTimeout(timer)
+      downloadTimers.current.clear()
     }
   }, [])
 
@@ -110,6 +118,24 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const bump = useCallback((key: RefreshKey) => {
     setRefresh((prev) => ({ ...prev, [key]: prev[key] + 1 }))
   }, [])
+
+  const retryDownload = useCallback(
+    async (messageId: number) => {
+      try {
+        const r = await api.records.retryDownload(messageId)
+        if (r.ok) {
+          pushToast('success', '已重新下载', '下载完成后会自动归档到目标路径')
+          bump('records')
+          void loadDashboard()
+        } else {
+          pushToast('error', '重新下载失败', r.message ?? '请稍后再试')
+        }
+      } catch (e) {
+        pushToast('error', '重新下载失败', errMsg(e))
+      }
+    },
+    [api, bump, loadDashboard, pushToast]
+  )
 
   const navigate = useCallback((next: Page) => {
     setPage(next)
@@ -154,6 +180,26 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
         case 'listening:changed':
           void loadDashboard()
           break
+        case 'download:progress': {
+          const p = e.progress
+          setDownloads((list) => {
+            const rest = list.filter((d) => d.attachmentId !== p.attachmentId)
+            if (p.state === 'failed') return rest
+            return [...rest, p].slice(-6)
+          })
+          // done 状态保留 4 秒后消失（让用户看到 100%）
+          if (p.state === 'done') {
+            const timer = setTimeout(() => {
+              setDownloads((list) => list.filter((d) => d.attachmentId !== p.attachmentId))
+              downloadTimers.current.delete(p.attachmentId)
+            }, 4000)
+            downloadTimers.current.set(p.attachmentId, timer)
+          }
+          if (p.state === 'failed') {
+            bump('records')
+          }
+          break
+        }
         default:
           break
       }
@@ -174,12 +220,14 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
       bump,
       rulesCount,
       toasts,
+      downloads,
+      retryDownload,
       pushToast,
       dismissToast
     }),
     [
       api, demo, page, navigate, dashboard, dashboardLoading, dashboardError, refreshDashboard,
-      refresh, bump, rulesCount, toasts, pushToast, dismissToast
+      refresh, bump, rulesCount, toasts, pushToast, dismissToast, downloads, retryDownload
     ]
   )
 

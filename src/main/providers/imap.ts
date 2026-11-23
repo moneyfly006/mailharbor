@@ -34,7 +34,7 @@ export const IDLE_RENEW_MS = 25 * 60 * 1000
 export const IDLE_DEBOUNCE_MS = 500
 export const POLL_FALLBACK_MS = 30 * 1000
 export const RECONNECT_DELAYS_MS = [5_000, 10_000, 30_000, 60_000, 5 * 60_000]
-export const DOWNLOAD_TIMEOUT_MS = 180_000
+export const DOWNLOAD_TIMEOUT_MS = 900_000
 const MAX_BODY_BYTES = 512 * 1024
 
 // ---------------------------------------------------------------------------
@@ -758,7 +758,13 @@ export class ImapSmtpProvider {
   }
 
   // ---------------- 附件下载 ----------------
-  async downloadAttachment(uid: number, part: InboundAttachment, destTmpPath: string): Promise<DownloadAttachmentResult> {
+  async downloadAttachment(
+    uid: number,
+    part: InboundAttachment,
+    destTmpPath: string,
+    onProgress?: (received: number, total: number) => void,
+    timeoutMs?: number
+  ): Promise<DownloadAttachmentResult> {
     const client = await this.ensureClient()
     await mkdir(dirname(destTmpPath), { recursive: true })
     const dl = await client.download(String(uid), part.partId, { uid: true })
@@ -768,10 +774,13 @@ export class ImapSmtpProvider {
     const hash = createHash('sha256')
     let size = 0
     let timedOut = false
+    // 预计大小：优先用 imapflow 给的解码后大小，其次用 BODYSTRUCTURE 的编码大小
+    const expected = Number((dl as { meta?: { expectedSize?: number } }).meta?.expectedSize ?? part.size ?? 0)
+    let lastReport = 0
     const timer = setTimeout(() => {
       timedOut = true
-      dl.content.destroy(new Error('download timeout'))
-    }, DOWNLOAD_TIMEOUT_MS)
+      dl.content!.destroy(new Error('download timeout'))
+    }, Math.max(30_000, Number(timeoutMs) || DOWNLOAD_TIMEOUT_MS))
     try {
       await pipeline(
         dl.content,
@@ -779,6 +788,16 @@ export class ImapSmtpProvider {
           transform(chunk: Buffer, _enc, cb) {
             size += chunk.length
             hash.update(chunk)
+            // 节流：每 200ms 或每 512KB 上报一次，避免事件刷屏
+            const now = Date.now()
+            if (onProgress && (now - lastReport > 200 || size - lastReport > 512 * 1024)) {
+              lastReport = now
+              try {
+                onProgress(size, expected)
+              } catch {
+                /* 进度回调不能影响下载 */
+              }
+            }
             cb(null, chunk)
           }
         }),
@@ -786,7 +805,7 @@ export class ImapSmtpProvider {
       )
     } catch (e) {
       await rm(destTmpPath, { force: true }).catch(() => {})
-      if (timedOut) throw new ProviderError('DOWNLOAD_TIMEOUT', '附件下载超时（180 秒），请检查网络后重试')
+      if (timedOut) throw new ProviderError('DOWNLOAD_TIMEOUT', '附件下载超时，请检查网络后点「重试下载」（可在下载记录页把超时调大）')
       if (e instanceof ProviderError) throw e
       const msg = e instanceof Error ? e.message : String(e)
       if (/too large|maxBytes/i.test(msg)) throw new ProviderError('ATTACHMENT_TOO_LARGE', '附件超过单封大小限制')
@@ -797,6 +816,11 @@ export class ImapSmtpProvider {
     if (size === 0) {
       await rm(destTmpPath, { force: true }).catch(() => {})
       throw new ProviderError('EMPTY_ATTACHMENT', '下载到的附件为空（可能被服务器拒绝）')
+    }
+    try {
+      onProgress?.(size, size)
+    } catch {
+      /* ignore */
     }
     return { size, sha256: hash.digest('hex'), tmpPath: destTmpPath }
   }

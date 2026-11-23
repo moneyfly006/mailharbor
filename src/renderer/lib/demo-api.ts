@@ -48,6 +48,44 @@ function maxId<T extends { id: number }>(items: T[]): number {
   return items.reduce((m, i) => Math.max(m, i.id), 0)
 }
 
+const listeners = new Set<(e: MainEvent) => void>()
+let progressSimulated = false
+function emitDemoEvent(e: MainEvent): void {
+  for (const cb of listeners) cb(e)
+}
+/** 演示模式：造一条"大附件下载中"的进度事件，让预览/截图能看到进度条 */
+function simulateDownloadProgress(): void {
+  if (progressSimulated) return
+  progressSimulated = true
+  const messageId = 9001
+  const attachmentId = 9001
+  const filename = 'POD_ORDER_20511.zip'
+  const total = 24 * 1024 * 1024
+  let received = 0
+  // 延迟 700ms：React 父组件的 onEvent 订阅晚于子组件的加载 effect，太早发会丢
+  setTimeout(() => {
+    const timer = setInterval(() => {
+      received += Math.round(total * 0.12)
+      const done = received >= total
+      if (done) clearInterval(timer)
+      emitDemoEvent({
+        type: 'download:progress',
+        progress: {
+          messageId,
+          attachmentId,
+          filename,
+          received: done ? total : received,
+          total,
+          percent: done ? 100 : Math.round((received / total) * 100),
+          state: done ? 'done' : 'active',
+          attempt: 1,
+          updatedAt: Date.now()
+        }
+      })
+    }, 320)
+  }, 700)
+}
+
 export function createDemoApi(): Api {
   const state: DemoState = {
     accounts: clone(DEMO_ACCOUNTS),
@@ -329,6 +367,7 @@ export function createDemoApi(): Api {
 
     records: {
       list: async (q: ListRecordsQuery): Promise<ListRecordsResult> => {
+        simulateDownloadProgress()
         await delay(160)
         let rows = state.records.slice()
         if (q.status && q.status !== 'all') rows = rows.filter((r) => r.status === q.status)
@@ -351,7 +390,24 @@ export function createDemoApi(): Api {
         const start = (page - 1) * pageSize
         return { total: rows.length, page, pageSize, rows: clone(rows.slice(start, start + pageSize)) }
       },
-      retry: async (messageId, deliveryId) => {
+      retryDownload: async (messageId: number) => {
+      await delay(900)
+      const rec = state.records.find((r) => r.id === messageId)
+      if (!rec) return { ok: false, message: '找不到这封邮件' }
+      rec.status = 'done'
+      for (const a of rec.attachments) {
+        a.state = 'downloaded'
+        for (const d of a.deliveries) {
+          if (d.state === 'failed' || d.state === 'retry_wait') {
+            d.state = 'done'
+            d.errorCode = null
+            d.error = null
+          }
+        }
+      }
+      return { ok: true }
+    },
+    retry: async (messageId, deliveryId) => {
         await delay(600)
         const rec = state.records.find((r) => r.id === messageId)
         if (!rec) throw new Error('记录不存在')
@@ -448,7 +504,10 @@ export function createDemoApi(): Api {
       listening: state.listening
     }),
 
-    onEvent: (_cb: (e: MainEvent) => void) => () => {}
+    onEvent: (cb: (e: MainEvent) => void) => {
+      listeners.add(cb)
+      return () => listeners.delete(cb)
+    }
   }
 
   return api

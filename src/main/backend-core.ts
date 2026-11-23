@@ -289,6 +289,13 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         emit({ type: 'toast', level: 'success', title: '启动对账完成', body: `认领 ${r.adopted} · 重做 ${r.reset} · 清理临时文件 ${r.tmpCleaned}` })
       }
     },
+    async retryDownload(messageId: number): Promise<{ ok: boolean; message?: string }> {
+      const target = repos.resetMessageForDownloadRetry(messageId)
+      if (!target) return { ok: false, message: '找不到这封邮件' }
+      emit({ type: 'dashboard:changed' })
+      const r = await scheduler.reprocess(target.accountId, [target.imapUid])
+      return { ok: r.processed > 0, message: r.processed > 0 ? undefined : '重新下载失败，请稍后再试' }
+    },
     async retryMessage(messageId: number, deliveryId?: number): Promise<void> {
       await dispatcher.retryDelivery(messageId, deliveryId)
     },

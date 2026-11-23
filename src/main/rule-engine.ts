@@ -128,6 +128,7 @@ export function matchRules(
 /** 附件类型白名单判定：后缀优先、MIME 兜底（Gmail/QQ 的 zip、tif 常见 octet-stream） */
 const MIME_OK: Record<string, string[]> = {
   zip: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream', 'multipart/x-zip'],
+  rar: ['application/x-rar-compressed', 'application/vnd.rar', 'application/octet-stream', 'application/x-rar'],
   tif: ['image/tiff', 'image/tif', 'application/octet-stream'],
   tiff: ['image/tiff', 'image/tif', 'application/octet-stream'],
   jpg: ['image/jpeg', 'image/pjpeg', 'application/octet-stream'],

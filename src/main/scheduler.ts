@@ -12,7 +12,8 @@ import type { Account, MainEvent } from '@shared/types'
 import * as repos from './repos'
 import { createLogger, type Logger } from './log'
 import {
-  ImapSmtpProvider, ProviderError, providerConfigFromAccount, type InboundMessage, type ProviderConfig, type SyncState
+  ImapSmtpProvider, ProviderError, providerConfigFromAccount,
+  type InboundAttachment, type InboundMessage, type ProviderConfig, type SyncState
 } from './providers/imap'
 import { classifyMailError, FIX_HINTS, type MailErrorCode } from './providers/errors'
 
@@ -22,6 +23,13 @@ export type Emit = (e: MainEvent) => void
 export interface SchedulerProvider {
   connect(): Promise<SyncState>
   fetchNewMessages(opts: { lastUid: number; uidValidity?: string | null; maxMessages?: number }): Promise<InboundMessage[]>
+  downloadAttachment(
+    uid: number,
+    part: InboundAttachment,
+    destTmpPath: string,
+    onProgress?: (received: number, total: number) => void,
+    timeoutMs?: number
+  ): Promise<{ size: number; sha256: string; tmpPath: string }>
   /** 可选：按 UID 精确补扫（新增/启用规则后重跑历史邮件） */
   fetchByUids?(uids: number[]): Promise<InboundMessage[]>
   startIdle(onMail: () => void): Promise<void>

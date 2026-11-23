@@ -239,6 +239,26 @@ export interface DashboardData {
 // ---------------------------------------------------------------------------
 // 自动更新
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// 附件下载进度（大附件/弱网时给用户看）
+// ---------------------------------------------------------------------------
+export interface DownloadProgress {
+  messageId: number
+  attachmentId: number
+  filename: string
+  /** 已下载字节 */
+  received: number
+  /** 预计总字节（0=未知） */
+  total: number
+  /** 0-100；total 未知时为 null */
+  percent: number | null
+  state: 'active' | 'done' | 'failed'
+  /** 第几次尝试（从 1 开始） */
+  attempt: number
+  message?: string
+  updatedAt: number
+}
+
 export type UpdateStatus =
   | 'idle'
   | 'checking'
@@ -290,6 +310,10 @@ export interface Settings {
   replyLanguage: 'zh' | 'en' | 'both'
   logLevel: 'debug' | 'info' | 'warn' | 'error'
   retryMaxAttempts: number
+  /** 附件下载失败时自动重试次数（弱网/大附件建议 2–3） */
+  downloadAttempts: number
+  /** 单个附件下载超时（秒），大附件/弱网可调到 1800 */
+  downloadTimeoutSec: number
   /** 网络代理（国内访问 Gmail 必须；默认跟随系统） */
   proxy: ProxySettings
   /** 回信用哪个账户发（null = 谁收到就用谁发） */
@@ -309,3 +333,4 @@ export type MainEvent =
   | { type: 'toast'; level: 'success' | 'warn' | 'error'; title: string; body?: string }
   | { type: 'listening:changed'; listening: boolean }
   | { type: 'update:changed'; state: UpdateState }
+  | { type: 'download:progress'; progress: DownloadProgress }
