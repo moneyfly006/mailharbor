@@ -231,7 +231,8 @@ function imapOptionsOf(cfg: ProviderConfig, overrides: Partial<ImapFlowOptions> 
     // 跨国链路/代理下握手更慢，放宽到 20s；读取超时 2 分钟（Gmail 大附件常见）
     connectionTimeout: 20_000,
     greetingTimeout: 20_000,
-    socketTimeout: 120_000,
+    // 大附件分块 FETCH 时服务器可能长时间检索后再回数据；120 秒过短会误报 Socket timeout
+    socketTimeout: 300_000,
     // 连接空闲后自动进入 IDLE（EXISTS 事件靠它）；25 分钟自动断开重进（RFC 2177 要求 <29 分钟）
     disableAutoIdle: false,
     autoIdleDelay: 500,
@@ -1013,9 +1014,19 @@ export class ImapSmtpProvider {
             tls: { rejectUnauthorized: !this.cfg.allowSelfSigned, servername: endpoint.servername },
             connectionTimeout: 20_000,
             greetingTimeout: 20_000,
+            // 并行分段可能很大，给足空闲超时；超时由外层 Promise.race/重试兜底
+            socketTimeout: 10 * 60_000,
             disableAutoIdle: true
           })
         )
+        // 关键：每条额外连接都必须挂 error 监听。
+        // 否则 socket timeout 会以未捕获 'error' 事件冒到 Electron 主进程，弹「A JavaScript error occurred」。
+        c.on('error', (e: Error) => {
+          this.log.warn(`并行下载连接异常：${e.message}`)
+        })
+        c.on('close', () => {
+          /* 连接关闭由 finally 统一清理 */
+        })
         await c.connect()
         await c.mailboxOpen('INBOX', { readOnly: true })
         clients.push(c)

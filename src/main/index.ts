@@ -32,8 +32,41 @@ function broadcast(e: MainEvent): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('main:event', e)
 }
 
+/**
+ * 全局兜底：网络库（imapflow/smtp）偶发的 socket 错误若以未捕获事件冒出来，
+ * Electron 默认会弹「A JavaScript error occurred in the main process」并中断。
+ * 这里统一记录到日志后忽略，保证后台收信/下载不被打断。
+ */
+function installProcessGuards(): void {
+  const { appendFileSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
+  const { join } = require('node:path') as typeof import('node:path')
+  const logDir = (() => {
+    try {
+      return app.getPath('logs')
+    } catch {
+      return app.getPath('userData')
+    }
+  })()
+  const write = (kind: string, err: unknown): void => {
+    try {
+      mkdirSync(logDir, { recursive: true })
+      const msg = err instanceof Error ? `${err.stack ?? err.message}` : String(err)
+      appendFileSync(join(logDir, 'crash.log'), `[${new Date().toISOString()}] ${kind}
+${msg}
+
+`)
+    } catch {
+      /* ignore */
+    }
+    console.error(`[${kind}]`, err)
+  }
+  process.on('uncaughtException', (err) => write('uncaughtException', err))
+  process.on('unhandledRejection', (reason) => write('unhandledRejection', reason))
+}
+
 async function bootstrap(): Promise<void> {
   await app.whenReady()
+  installProcessGuards()
 
   // 产品曾用名 MailHarbor：老用户的数据目录是 %APPDATA%\MailHarbor，
   // 改名后 userData 变成「邮箱资料助手」，这里把老库迁移过来，避免"看不到之前的记录"。
