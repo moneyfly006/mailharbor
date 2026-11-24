@@ -53,6 +53,14 @@ function migrate(database: ReturnType<typeof openSqlite>): void {
     if (!cols('accounts').includes('spam_uid_validity')) {
       database.exec('ALTER TABLE accounts ADD COLUMN spam_uid_validity TEXT')
     }
+    if (!cols('attachments').includes('extracted_count')) {
+      database.exec('ALTER TABLE attachments ADD COLUMN extracted_count INTEGER NOT NULL DEFAULT 0')
+      database.exec('ALTER TABLE attachments ADD COLUMN extract_skipped INTEGER NOT NULL DEFAULT 0')
+      database.exec('ALTER TABLE attachments ADD COLUMN extract_error TEXT')
+    }
+    if (!cols('oauth_tokens').includes('last_error')) {
+      database.exec('ALTER TABLE oauth_tokens ADD COLUMN last_error TEXT')
+    }
     if (!cols('messages').includes('auto_retry_count')) {
       database.exec('ALTER TABLE messages ADD COLUMN auto_retry_count INTEGER NOT NULL DEFAULT 0')
     }
@@ -125,6 +133,7 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   downloadTimeoutSec: 900,
   downloadChunkSizeMB: 2,
   scanSpam: true,
+  gmailApiAccel: true,
   autoRetryFailed: true,
   parallelDownload: true,
   parallelConnections: 4,

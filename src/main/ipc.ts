@@ -210,6 +210,21 @@ export function registerIpc(context: IpcContext): void {
     }
   })
 
+  ipcMain.handle(IPC.gmailStatus, () => requireBackend().gmail.status())
+
+  ipcMain.handle(IPC.gmailAuthStart, async (_e, accountId: number, clientId: string, clientSecret: string) => {
+    const session = await requireBackend().gmail.startAuth(Number(accountId), String(clientId ?? '').trim(), String(clientSecret ?? '').trim())
+    await shell.openExternal(session.authUrl)
+    return { authUrl: session.authUrl }
+  })
+
+  ipcMain.handle(IPC.gmailRevoke, (_e, accountId: number) => {
+    requireBackend().gmail.revoke(Number(accountId))
+    ctx?.broadcast({ type: 'gmail:auth', accountId: Number(accountId), authorized: false })
+  })
+
+  ipcMain.handle(IPC.gmailTest, (_e, accountId: number) => requireBackend().gmail.test(Number(accountId)))
+
   ipcMain.handle(IPC.rulesTestSubject, async (_e, subject: string, body?: string) => {
     return requireBackend().testSubject(String(subject ?? ''), body)
   })

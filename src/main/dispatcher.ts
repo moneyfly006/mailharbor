@@ -225,31 +225,10 @@ export class Dispatcher {
       })
       this.log.info(`已落盘 ${copied.savedPath}`)
 
-      // 压缩包：解压到当前文件夹（不新建子文件夹），保留原压缩包
+      // 压缩包：解压到当前文件夹（不新建子文件夹），保留原压缩包。
+      // 解压放到后台队列（同目录串行），避免大压缩包占住投递并发、拖慢后续邮件与回信。
       if (this.deps.getSetting<boolean>('extractArchives') !== false && isArchiveFile(copied.savedName)) {
-        try {
-          const res = await extractArchiveTo(copied.savedPath, dirname(copied.savedPath))
-          if (res) {
-            if (res.errors.length > 0) {
-              this.log.warn(`解压部分失败 ${copied.savedName}：${res.errors.slice(0, 3).join('；')}`)
-            }
-            this.log.info(`已解压 ${copied.savedName}：${res.extracted} 个文件${res.skipped ? `（跳过 ${res.skipped}）` : ''}`)
-            this.deps.emit({
-              type: 'toast',
-              level: res.errors.length ? 'warn' : 'success',
-              title: `已解压 ${res.extracted} 个文件`,
-              body: `${copied.savedName} → ${dirname(copied.savedPath)}`
-            })
-          }
-        } catch (e) {
-          this.log.error(`解压失败 ${copied.savedName}`, e instanceof Error ? e.message : String(e))
-          this.deps.emit({
-            type: 'toast',
-            level: 'warn',
-            title: '压缩包已保存，但解压失败',
-            body: `${copied.savedName}：${e instanceof Error ? e.message : String(e)}`
-          })
-        }
+        this.queueExtract(copied.savedPath, copied.savedName, row.attachment_id, messageId)
       }
 
       this.afterDelivery(row, 'delivery:changed')
@@ -287,6 +266,65 @@ export class Dispatcher {
   }
 
   /** 状态变化后：刷新聚合状态，若全部进入终态则通知 pipeline（聚合 + 回信） */
+  /** 解压队列：同一目录串行执行，不同目录并行，不阻塞投递主流程 */
+  private extractChains = new Map<string, Promise<void>>()
+
+  private queueExtract(savedPath: string, savedName: string, attachmentId: number, messageId: number): void {
+    const dir = dirname(savedPath)
+    const prev = this.extractChains.get(dir) ?? Promise.resolve()
+    const next = prev
+      .catch(() => {})
+      .then(async () => {
+        try {
+          const res = await extractArchiveTo(savedPath, dir)
+          if (res) {
+            if (res.errors.length > 0) {
+              this.log.warn(`解压部分失败 ${savedName}：${res.errors.slice(0, 3).join('；')}`)
+            }
+            this.log.info(`已解压 ${savedName}：${res.extracted} 个文件${res.skipped ? `（跳过 ${res.skipped}）` : ''}`)
+            try {
+              repos.setAttachmentExtractInfo(attachmentId, {
+                extracted: res.extracted,
+                skipped: res.skipped,
+                errors: res.errors
+              })
+              this.deps.emit({ type: 'delivery:changed', messageId })
+            } catch {
+              /* 记录失败不影响解压本身 */
+            }
+            this.deps.emit({
+              type: 'toast',
+              level: res.errors.length ? 'warn' : 'success',
+              title: `已解压 ${res.extracted} 个文件`,
+              body: `${savedName} → ${dir}`
+            })
+          }
+        } catch (e) {
+          this.log.error(`解压失败 ${savedName}`, e instanceof Error ? e.message : String(e))
+          try {
+            repos.setAttachmentExtractInfo(attachmentId, {
+              extracted: 0,
+              skipped: 0,
+              errors: [e instanceof Error ? e.message : String(e)]
+            })
+          } catch {
+            /* ignore */
+          }
+          this.deps.emit({
+            type: 'toast',
+            level: 'warn',
+            title: '压缩包已保存，但解压失败',
+            body: `${savedName}：${e instanceof Error ? e.message : String(e)}`
+          })
+        }
+      })
+      .finally(() => {
+        if (this.extractChains.get(dir) === next) this.extractChains.delete(dir)
+      })
+    this.extractChains.set(dir, next)
+    void next
+  }
+
   private afterDelivery(row: DeliveryRow, event: 'delivery:changed'): void {
     this.deps.emit({ type: event, messageId: row.message_id })
     this.refreshMessageStatus(row.message_id)

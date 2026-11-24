@@ -63,7 +63,7 @@ export function Records(): JSX.Element {
   const [webDownloading, setWebDownloading] = useState<number[]>([])
   const [exporting, setExporting] = useState(false)
   // 弱网/大附件：下载超时与自动重试次数（存到设置）
-  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean } | null>(null)
+  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean; gmail: boolean } | null>(null)
   const [dlPanelOpen, setDlPanelOpen] = useState(false)
   const [bulkRetrying, setBulkRetrying] = useState(false)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -80,15 +80,19 @@ export function Records(): JSX.Element {
           parallel: s.parallelDownload !== false,
           conn: Number(s.parallelConnections ?? 4),
           spam: s.scanSpam !== false,
-          autoRetry: s.autoRetryFailed !== false
+          autoRetry: s.autoRetryFailed !== false,
+          gmail: s.gmailApiAccel !== false
         })
       )
       .catch(() =>
-        setDlSettings({ timeoutSec: 900, attempts: 3, extract: true, chunkMB: 2, parallel: true, conn: 4, spam: true, autoRetry: true })
+        setDlSettings({
+          timeoutSec: 900, attempts: 3, extract: true, chunkMB: 2, parallel: true, conn: 4,
+          spam: true, autoRetry: true, gmail: true
+        })
       )
   }, [api])
 
-  const saveDlSettings = async (next: { timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean }): Promise<void> => {
+  const saveDlSettings = async (next: { timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean; gmail: boolean }): Promise<void> => {
     setDlSettings(next)
     try {
       const s = await api.settings.get()
@@ -101,7 +105,8 @@ export function Records(): JSX.Element {
         parallelDownload: next.parallel,
         parallelConnections: next.conn,
         scanSpam: next.spam,
-        autoRetryFailed: next.autoRetry
+        autoRetryFailed: next.autoRetry,
+        gmailApiAccel: next.gmail
       })
       pushToast('success', '下载设置已保存', `超时 ${Math.round(next.timeoutSec / 60)} 分钟 · 自动重试 ${next.attempts} 次`)
     } catch (e) {
@@ -323,6 +328,18 @@ export function Records(): JSX.Element {
             </select>
           </div>
           <div className="dls-item">
+            <span className="dls-lbl">Gmail 加速（API）</span>
+            <select
+              className="dls-select"
+              value={dlSettings.gmail ? 'on' : 'off'}
+              aria-label="是否启用 Gmail API 加速下载"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, gmail: e.target.value === 'on' })}
+            >
+              <option value="on">开启（HTTPS 下载）</option>
+              <option value="off">关闭（走 IMAP）</option>
+            </select>
+          </div>
+          <div className="dls-item">
             <span className="dls-lbl">失败自动重试</span>
             <select
               className="dls-select"
@@ -334,6 +351,18 @@ export function Records(): JSX.Element {
               <option value={2}>2 次</option>
               <option value={3}>3 次（推荐）</option>
               <option value={5}>5 次</option>
+            </select>
+          </div>
+          <div className="dls-item">
+            <span className="dls-lbl">Gmail 加速（API）</span>
+            <select
+              className="dls-select"
+              value={dlSettings.gmail ? 'on' : 'off'}
+              aria-label="是否启用 Gmail API 加速下载"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, gmail: e.target.value === 'on' })}
+            >
+              <option value="on">开启（HTTPS 下载）</option>
+              <option value="off">关闭（走 IMAP）</option>
             </select>
           </div>
           <div className="dls-item">
@@ -604,6 +633,16 @@ export function Records(): JSX.Element {
                             <span className="nm">{firstFile.filename}</span>
                             {row.attachments.length > 1 ? <span className="more">等 {row.attachments.length} 个</span> : null}
                             <span className="sz">{fmtBytes(firstFile.size)}</span>
+                            {firstFile.extractedCount ? (
+                              <span
+                                className="ex-tag"
+                                title={firstFile.extractError ? `解压警告：${firstFile.extractError}` : `已解压 ${firstFile.extractedCount} 个文件`}
+                              >
+                                解压 {firstFile.extractedCount}
+                              </span>
+                            ) : firstFile.extractError ? (
+                              <span className="ex-tag bad" title={firstFile.extractError}>解压失败</span>
+                            ) : null}
                           </div>
                         ) : null}
                       </td>

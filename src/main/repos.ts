@@ -180,6 +180,9 @@ export interface AttachmentRow {
   sha256: string | null
   size: number | null
   status: 'pending' | 'downloaded' | 'failed' | 'skipped'
+  extracted_count: number
+  extract_skipped: number
+  extract_error: string | null
   error: string | null
   created_at: number
   updated_at: number
@@ -577,6 +580,81 @@ export function setAccountStatus(
 }
 
 /** 增量收信游标 / 健康时间 */
+// ---------------------------------------------------------------------------
+// OAuth 令牌（Gmail API 加速用；client_secret 与 refresh_token 均加密存储）
+// ---------------------------------------------------------------------------
+export interface OAuthTokenRow {
+  account_id: number
+  provider: string
+  email: string
+  client_id: string
+  client_secret_enc: SecretBlob | null
+  refresh_token_enc: SecretBlob | null
+  access_token: string | null
+  expiry: number | null
+  last_error: string | null
+  updated_at: number
+}
+
+export function saveOAuthToken(input: {
+  accountId: number
+  provider: string
+  email: string
+  clientId: string
+  clientSecret: string
+  refreshToken: string | null
+  accessToken?: string | null
+  expiry?: number | null
+}): void {
+  db()
+    .prepare(
+      `INSERT INTO oauth_tokens(account_id,provider,email,client_id,client_secret_enc,refresh_token_enc,access_token,expiry,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(account_id) DO UPDATE SET
+         provider=excluded.provider, email=excluded.email, client_id=excluded.client_id,
+         client_secret_enc=excluded.client_secret_enc,
+         refresh_token_enc=COALESCE(excluded.refresh_token_enc, refresh_token_enc),
+         access_token=excluded.access_token, expiry=excluded.expiry, last_error=NULL, updated_at=excluded.updated_at`
+    )
+    .run(
+      input.accountId,
+      input.provider,
+      input.email,
+      input.clientId,
+      codec.encrypt(input.clientSecret),
+      input.refreshToken ? codec.encrypt(input.refreshToken) : null,
+      input.accessToken ?? null,
+      input.expiry ?? null,
+      now()
+    )
+}
+
+export function getOAuthToken(accountId: number): OAuthTokenRow | null {
+  return (db().prepare('SELECT * FROM oauth_tokens WHERE account_id=?').get(accountId) as OAuthTokenRow | undefined) ?? null
+}
+
+export function getOAuthSecrets(accountId: number): { clientSecret: string; refreshToken: string } {
+  const row = getOAuthToken(accountId)
+  if (!row) return { clientSecret: '', refreshToken: '' }
+  return {
+    clientSecret: codec.decrypt(row.client_secret_enc),
+    refreshToken: codec.decrypt(row.refresh_token_enc)
+  }
+}
+
+export function listOAuthTokens(): OAuthTokenRow[] {
+  return db().prepare('SELECT * FROM oauth_tokens').all() as OAuthTokenRow[]
+}
+
+/** 记录授权错误（refresh_token 失效等），供 UI 提示重新授权 */
+export function markOAuthError(accountId: number, error: string | null): void {
+  db().prepare('UPDATE oauth_tokens SET last_error=?, updated_at=updated_at WHERE account_id=?').run(error, accountId)
+}
+
+export function deleteOAuthToken(accountId: number): void {
+  db().prepare('DELETE FROM oauth_tokens WHERE account_id=?').run(accountId)
+}
+
 export function getAccountSpamState(id: number): { lastUid: number; uidValidity: string | null } | null {
   const row = db().prepare('SELECT spam_last_uid, spam_uid_validity FROM accounts WHERE id=?').get(id) as
     | { spam_last_uid: number; spam_uid_validity: string | null }
@@ -1098,6 +1176,33 @@ export function listAttachmentsByMessage(messageId: number): AttachmentRow[] {
   return db().prepare('SELECT * FROM attachments WHERE message_id=? ORDER BY id ASC').all(messageId) as AttachmentRow[]
 }
 
+/** 秒传：查找同名同大小且已下载的附件（用于跨邮件去重，避免重复下载） */
+export function findDownloadedAttachmentByMeta(
+  filename: string,
+  size: number | null,
+  excludeId: number
+): { tmp_path: string; sha256: string | null; size: number | null } | null {
+  if (!filename) return null
+  const row = db()
+    .prepare(
+      `SELECT tmp_path, sha256, size FROM attachments
+       WHERE id<>? AND filename=? AND status='downloaded' AND tmp_path IS NOT NULL
+         AND (? IS NULL OR size=?)
+       ORDER BY id DESC LIMIT 1`
+    )
+    .get(excludeId, filename, size, size) as { tmp_path: string; sha256: string | null; size: number | null } | undefined
+  return row ?? null
+}
+
+export function setAttachmentExtractInfo(
+  attachmentId: number,
+  info: { extracted: number; skipped: number; errors: string[] }
+): void {
+  db()
+    .prepare('UPDATE attachments SET extracted_count=?, extract_skipped=?, extract_error=? WHERE id=?')
+    .run(info.extracted, info.skipped, info.errors.length ? info.errors.slice(0, 5).join('；') : null, attachmentId)
+}
+
 export function setAttachmentDownloaded(
   id: number,
   info: { tmpPath: string; size: number; sha256: string }
@@ -1503,6 +1608,8 @@ function toRecordRow(m: MessageRow, accountEmail: string, attachments: Attachmen
       filename: a.filename,
       size: a.size ?? a.declared_size ?? null,
       state: a.status,
+      extractedCount: a.extracted_count ?? 0,
+      extractError: a.extract_error ?? null,
       deliveries: (byAttachment.get(a.id) ?? []).map(mapDelivery)
     }))
   }

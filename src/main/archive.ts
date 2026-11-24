@@ -16,6 +16,16 @@ import { createHash } from 'node:crypto'
 import { dirname, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 
+/** 安全阀：防止 zip bomb / 恶意压缩包把磁盘撑爆 */
+export const ARCHIVE_SAFETY = {
+  maxEntries: 20_000,
+  maxTotalBytes: 4 * 1024 * 1024 * 1024,
+  maxFileBytes: 2 * 1024 * 1024 * 1024,
+  /** 压缩比超过该值且解压总量 > 50MB 时判定可疑 */
+  maxRatio: 100
+}
+const BLOCKED_EXT = new Set(['.exe', '.lnk', '.bat', '.cmd', '.com', '.scr', '.msi', '.vbs', '.js', '.jse', '.ps1', '.dll'])
+
 export interface ExtractResult {
   extracted: number
   skipped: number
@@ -164,13 +174,32 @@ async function extractWith7za(archivePath: string, targetDir: string, result: Ex
     const tail = out.trim().split('\n').slice(-3).join(' ')
     throw new Error(`7za 解压失败（code ${code}）：${tail}`)
   }
+  let total = 0
+  let count = 0
   const walk = (dir: string, prefix: string): void => {
     for (const name of readdirSync(dir)) {
       const full = join(dir, name)
       const rel = prefix ? `${prefix}/${name}` : name
       const st = statSync(full)
-      if (st.isDirectory()) walk(full, rel)
-      else writeEntry(targetDir, rel, readFileSync(full), result)
+      if (st.isDirectory()) {
+        walk(full, rel)
+        continue
+      }
+      count++
+      if (count > ARCHIVE_SAFETY.maxEntries) throw new Error('压缩包条目过多，已中止')
+      const ext = extname(name).toLowerCase()
+      if (BLOCKED_EXT.has(ext)) {
+        result.skipped++
+        continue
+      }
+      if (st.size > ARCHIVE_SAFETY.maxFileBytes) {
+        result.skipped++
+        result.errors.push(`${rel}: 单文件超过 2GB，已跳过`)
+        continue
+      }
+      total += st.size
+      if (total > ARCHIVE_SAFETY.maxTotalBytes) throw new Error('解压后总大小超过 4GB，已中止（疑似压缩炸弹）')
+      writeEntry(targetDir, rel, readFileSync(full), result)
     }
   }
   walk(tempOut, '')
@@ -179,10 +208,41 @@ async function extractWith7za(archivePath: string, targetDir: string, result: Ex
 async function extractZipDirect(archivePath: string, targetDir: string, result: ExtractResult): Promise<void> {
   const AdmZip = (await import('adm-zip')).default
   const zip = new AdmZip(archivePath)
-  for (const entry of zip.getEntries()) {
+  const entries = zip.getEntries()
+  if (entries.length > ARCHIVE_SAFETY.maxEntries) {
+    throw new Error(`压缩包条目过多（${entries.length}），已拒绝解压`)
+  }
+  const zipSize = statSync(archivePath).size
+  let total = 0
+  for (const entry of entries) {
     if (entry.isDirectory) continue
+    const header: any = entry.header ?? {}
+    // 符号链接（Unix 模式 0xA000）直接跳过
+    const unixMode = Number(header.attr ?? 0) >>> 16
+    if ((unixMode & 0xf000) === 0xa000) {
+      result.skipped++
+      continue
+    }
+    const ext = extname(entry.entryName).toLowerCase()
+    if (BLOCKED_EXT.has(ext)) {
+      result.skipped++
+      continue
+    }
+    const data = entry.getData()
+    if (data.length > ARCHIVE_SAFETY.maxFileBytes) {
+      result.errors.push(`${entry.entryName}: 单文件超过 2GB，已跳过`)
+      result.skipped++
+      continue
+    }
+    total += data.length
+    if (total > ARCHIVE_SAFETY.maxTotalBytes) {
+      throw new Error('解压后总大小超过 4GB，已中止（疑似压缩炸弹）')
+    }
+    if (zipSize > 0 && total > 50 * 1024 * 1024 && total / zipSize > ARCHIVE_SAFETY.maxRatio) {
+      throw new Error('压缩比异常（疑似压缩炸弹），已中止')
+    }
     try {
-      writeEntry(targetDir, entry.entryName, entry.getData(), result)
+      writeEntry(targetDir, entry.entryName, data, result)
     } catch (e) {
       result.errors.push(`${entry.entryName}: ${e instanceof Error ? e.message : String(e)}`)
     }

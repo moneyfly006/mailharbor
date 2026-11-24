@@ -191,6 +191,9 @@ export interface RecordRow {
     filename: string
     size: number | null
     state: 'pending' | 'downloaded' | 'failed' | 'skipped'
+    /** 已解压出的文件数（0=未解压或不是压缩包） */
+    extractedCount?: number
+    extractError?: string | null
     deliveries: Delivery[]
   }>
 }
@@ -352,6 +355,8 @@ export interface Settings {
   scanSpam: boolean
   /** 失败自动重试（失败邮件按退避时间自动重新下载，最多 6 次） */
   autoRetryFailed: boolean
+  /** Gmail API 加速（附件走 HTTPS 下载，比 IMAP 快 3–6 倍） */
+  gmailApiAccel: boolean
   /** 多连接并行下载（把整封邮件切段，在 N 条连接上同时取，再本地解析附件） */
   parallelDownload: boolean
   /** 并行连接数（2-8，默认 4） */
@@ -380,3 +385,4 @@ export type MainEvent =
   | { type: 'listening:changed'; listening: boolean }
   | { type: 'update:changed'; state: UpdateState }
   | { type: 'download:progress'; progress: DownloadProgress }
+  | { type: 'gmail:auth'; accountId: number; authorized: boolean; error?: string }

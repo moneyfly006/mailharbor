@@ -28,6 +28,10 @@ export const IPC = {
   recordsRetryDownload: 'records:retry-download',
   recordsReprocess: 'records:reprocess',
   rulesTestSubject: 'rules:test-subject',
+  gmailStatus: 'gmail:status',
+  gmailAuthStart: 'gmail:auth-start',
+  gmailRevoke: 'gmail:revoke',
+  gmailTest: 'gmail:test',
   recordsOpenLink: 'records:open-link',
   recordsDownloadLink: 'records:download-link',
   recordsArchiveManual: 'records:archive-manual',
@@ -80,6 +84,12 @@ export interface Api {
       subject: string,
       body?: string
     ): Promise<{ normalized: string; hits: Array<{ ruleId: number; keyword: string; source: 'subject' | 'body' }> }>
+  }
+  gmail: {
+    status(): Promise<Array<{ accountId: number; email: string; provider: string; expiry: number | null; daysLeft: number | null; needsReauth: boolean; lastError: string | null }>>
+    startAuth(accountId: number, clientId: string, clientSecret: string): Promise<{ authUrl: string }>
+    revoke(accountId: number): Promise<void>
+    test(accountId: number): Promise<{ ok: boolean; email?: string; message?: string }>
   }
   records: {
     list(q: ListRecordsQuery): Promise<ListRecordsResult>

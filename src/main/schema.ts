@@ -9,6 +9,19 @@ PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  email TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  client_secret_enc BLOB,
+  refresh_token_enc BLOB,
+  access_token TEXT,
+  expiry INTEGER,
+  last_error TEXT,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   preset TEXT NOT NULL DEFAULT 'custom',
@@ -88,6 +101,9 @@ CREATE TABLE IF NOT EXISTS attachments (
   declared_size INTEGER,
   tmp_path TEXT, sha256 TEXT, size INTEGER,
   status TEXT NOT NULL DEFAULT 'pending',
+  extracted_count INTEGER NOT NULL DEFAULT 0,
+  extract_skipped INTEGER NOT NULL DEFAULT 0,
+  extract_error TEXT,
   error TEXT,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
   UNIQUE(message_id, part_id)
@@ -132,6 +148,9 @@ CREATE TABLE IF NOT EXISTS logs (
 
 CREATE INDEX IF NOT EXISTS ix_msgs_time ON messages(received_at DESC);
 CREATE INDEX IF NOT EXISTS ix_msgs_status ON messages(status);
+CREATE INDEX IF NOT EXISTS ix_msgs_status_time ON messages(status, received_at DESC);
+CREATE INDEX IF NOT EXISTS ix_att_msg ON attachments(message_id);
+CREATE INDEX IF NOT EXISTS ix_dlv_state ON deliveries(state);
 CREATE INDEX IF NOT EXISTS ix_msgs_account ON messages(account_id, imap_uid);
 CREATE INDEX IF NOT EXISTS ix_dlv_queue ON deliveries(state, next_retry_at);
 CREATE INDEX IF NOT EXISTS ix_dlv_msg ON deliveries(message_id);

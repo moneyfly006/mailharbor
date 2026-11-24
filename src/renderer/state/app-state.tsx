@@ -180,6 +180,10 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
         case 'listening:changed':
           void loadDashboard()
           break
+        case 'gmail:auth':
+          bump('accounts')
+          void loadDashboard()
+          break
         case 'download:progress': {
           const p = e.progress
           setDownloads((list) => {

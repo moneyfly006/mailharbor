@@ -13,8 +13,8 @@ import type { InboundAttachment, InboundMessage } from './providers/imap'
 import { createLogger, type Logger } from './log'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { rm, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { copyFile, rm, stat } from 'node:fs/promises'
+import { extname, join } from 'node:path'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -59,6 +59,20 @@ export interface ReplySink {
   maybeReply(messageId: number): Promise<void>
 }
 
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (;;) {
+      const i = next++
+      if (i >= items.length) return
+      results[i] = await fn(items[i]!)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
+
 export interface PipelineDeps {
   emit: Emit
   getSetting: <T = unknown>(key: string) => T
@@ -68,6 +82,18 @@ export interface PipelineDeps {
   linkedFiles?: {
     supports(account: Account, url: string): boolean
     download(accountId: number, messageId: number, url: string, dest: string): Promise<{ path: string; filename: string } | null>
+  }
+  /** Gmail API 加速下载（可选；返回 null 表示不可用 → 回退 IMAP） */
+  gmail?: {
+    download(opts: {
+      account: Account
+      rfcMessageId: string
+      filename: string
+      declaredSize: number
+      destPath: string
+      onProgress: (received: number, total: number) => void
+      timeoutMs: number
+    }): Promise<{ size: number; sha256: string; tmpPath: string } | null>
   }
   now?: () => number
   logger?: Logger
@@ -392,8 +418,24 @@ export class MailPipeline {
     msg: InboundMessage,
     parts: InboundAttachment[]
   ): Promise<Array<{ attachmentId: number; part: InboundAttachment }> | null> {
-    const out: Array<{ attachmentId: number; part: InboundAttachment }> = []
-    for (const part of parts) {
+    // Gmail 账户走 API 时多个附件可以并发（各自独立 HTTPS 请求）；IMAP 仍串行，避免争抢同一连接
+    const useGmail = Boolean(this.deps.gmail && account.preset === 'gmail' && msg.rfcMessageId)
+    const results = await mapLimit(parts, useGmail ? 3 : 1, (part) =>
+      this.downloadOne(account, provider, messageId, msg, part)
+    )
+    if (results.some((r) => r === null)) return null
+    return results as Array<{ attachmentId: number; part: InboundAttachment }>
+  }
+
+  /** 下载单个附件（复用已下载 / Gmail API / IMAP 重试） */
+  private async downloadOne(
+    account: Account,
+    provider: AttachmentDownloader,
+    messageId: number,
+    msg: InboundMessage,
+    part: InboundAttachment
+  ): Promise<{ attachmentId: number; part: InboundAttachment } | null> {
+    {
       const row = repos.upsertAttachment(messageId, {
         partId: part.partId,
         filename: part.filename,
@@ -401,8 +443,40 @@ export class MailPipeline {
         declaredSize: part.size
       })
       if (row.status === 'downloaded' && row.tmp_path && (await pathExists(row.tmp_path))) {
-        out.push({ attachmentId: row.id, part })
-        continue
+        return { attachmentId: row.id, part }
+      }
+      // 秒传：同一文件（同名同大小）之前已下载过，直接复用本地文件，不再走网络
+      const cached = repos.findDownloadedAttachmentByMeta(part.filename, part.size ?? null, row.id)
+      if (cached && (await pathExists(cached.tmp_path))) {
+        const destCached = join(this.deps.tmpDir, `${account.id}-cache-${row.id}${extname(part.filename) || '.bin'}`)
+        try {
+          await copyFile(cached.tmp_path, destCached)
+          repos.setAttachmentDownloaded(row.id, {
+            tmpPath: destCached,
+            size: cached.size ?? part.size ?? 0,
+            sha256: cached.sha256 ?? ''
+          })
+          this.log.info(`附件秒传（本地已有）：${part.filename}`)
+          this.deps.emit({
+            type: 'download:progress',
+            progress: {
+              messageId,
+              attachmentId: row.id,
+              filename: part.filename,
+              received: cached.size ?? 0,
+              total: cached.size ?? 0,
+              percent: 100,
+              state: 'done',
+              attempt: 0,
+              bytesPerSec: 0,
+              message: '本地已有，秒传',
+              updatedAt: Date.now()
+            }
+          })
+          return { attachmentId: row.id, part }
+        } catch {
+          /* 秒传失败则继续正常下载 */
+        }
       }
       const safePart = sanitizeFilename(part.partId || 'attachment', 'attachment').replace(/[^\w.-]/g, '_')
       const dest = join(
@@ -423,7 +497,44 @@ export class MailPipeline {
       let res: { size: number; sha256: string; tmpPath: string } | null = null
       let lastErr: { message: string; code: string } | null = null
       let completedAttempt = 1
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Gmail API 加速：优先走 HTTPS（比 IMAP 快 3–6 倍）；失败自动回退 IMAP
+      if (this.deps.gmail && account.preset === 'gmail' && msg.rfcMessageId) {
+        try {
+          const apiRes = await this.deps.gmail.download({
+            account,
+            rfcMessageId: msg.rfcMessageId,
+            filename: part.filename,
+            declaredSize: Number(part.size) || 0,
+            destPath: dest,
+            timeoutMs,
+            onProgress: (received, total) => {
+              this.deps.emit({
+                type: 'download:progress',
+                progress: {
+                  messageId,
+                  attachmentId: row.id,
+                  filename: part.filename,
+                  received,
+                  total,
+                  percent: total > 0 ? Math.min(100, Math.round((received / total) * 100)) : null,
+                  state: 'active',
+                  attempt: 1,
+                  bytesPerSec: 0,
+                  message: 'Gmail API',
+                  updatedAt: Date.now()
+                }
+              })
+            }
+          })
+          if (apiRes) {
+            res = apiRes
+            this.log.info(`附件经 Gmail API 下载：${part.filename}（${Math.round(apiRes.size / 1024)}KB）`)
+          }
+        } catch (e) {
+          this.log.warn(`Gmail API 下载失败，回退 IMAP：${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+      for (let attempt = 1; attempt <= maxAttempts && !res; attempt++) {
         let lastReceived = 0
         let lastTotal = Math.max(0, Number(part.size) || 0)
         let lastSampleAt = Date.now()
@@ -509,7 +620,7 @@ export class MailPipeline {
       }
 
       repos.setAttachmentDownloaded(row.id, { tmpPath: res.tmpPath || dest, size: res.size, sha256: res.sha256 })
-      out.push({ attachmentId: row.id, part })
+      const result = { attachmentId: row.id, part }
       this.deps.emit({
         type: 'download:progress',
         progress: {
@@ -526,8 +637,8 @@ export class MailPipeline {
         }
       })
       this.log.info(`附件已下载：${part.filename}（${Math.round(res.size / 1024)}KB）`)
+      return result
     }
-    return out
   }
 
   private fallbackTypes(rules: Rule[]): string[] {

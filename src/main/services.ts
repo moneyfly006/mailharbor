@@ -25,6 +25,17 @@ export interface Backend {
     /** 最近一次检查完成时间 */
     lastCheckAt(): number | null
   }
+  /** Gmail API 加速（授权状态 / 授权 / 撤销 / 连通性测试） */
+  gmail: {
+    status(): Array<{ accountId: number; email: string; provider: string; expiry: number | null; daysLeft: number | null; needsReauth: boolean; lastError: string | null }>
+    startAuth(
+      accountId: number,
+      clientId: string,
+      clientSecret: string
+    ): Promise<{ authUrl: string; cancel: () => void }>
+    revoke(accountId: number): void
+    test(accountId: number): Promise<{ ok: boolean; email?: string; message?: string }>
+  }
   /** 测试「还没保存」的表单（新建账户向导用） */
   testAccount(input: AccountInput): Promise<TestResult>
   /** 测试已保存账户（用库里的加密密码） */

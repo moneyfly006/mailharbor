@@ -28,6 +28,12 @@ const api: Api = {
     targetsHealth: () => invoke(IPC.ruleTargetsHealth),
     testSubject: (subject, body) => invoke(IPC.rulesTestSubject, subject, body)
   },
+  gmail: {
+    status: () => invoke(IPC.gmailStatus),
+    startAuth: (accountId, clientId, clientSecret) => invoke(IPC.gmailAuthStart, accountId, clientId, clientSecret),
+    revoke: (accountId) => invoke(IPC.gmailRevoke, accountId),
+    test: (accountId) => invoke(IPC.gmailTest, accountId)
+  },
   records: {
     list: (q) => invoke(IPC.recordsList, q),
     retry: (messageId, deliveryId) => invoke(IPC.recordsRetry, messageId, deliveryId),

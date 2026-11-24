@@ -754,6 +754,7 @@ export const DEMO_SETTINGS: Settings = {
   downloadTimeoutSec: 900,
   downloadChunkSizeMB: 2,
   scanSpam: true,
+  gmailApiAccel: true,
   autoRetryFailed: true,
   parallelDownload: true,
   parallelConnections: 4,

@@ -895,7 +895,8 @@ export class ImapSmtpProvider {
         destTmpPath,
         onProgress,
         Number(timeoutMs) || DOWNLOAD_TIMEOUT_MS,
-        parallel.connections
+        parallel.connections,
+        fetchBytes
       )
       if (ranged) return ranged
     }
@@ -987,77 +988,132 @@ export class ImapSmtpProvider {
    * 解析出目标附件。Gmail 单连接约 0.4MB/s，4 连接实测约 0.9-1.3MB/s。
    * 失败返回 null，由调用方回退到普通单连接下载。
    */
+  /**
+   * 分块并行 + 断点续传（IMAP）。
+   *
+   * 把整封邮件按固定块（默认 4MB）并行拉取，写到 destTmpPath.eml 的对应偏移；
+   * 同时把「已完成的块」写入 .state.json。网络中断后再次重试时，只补缺失块，
+   * 已下载部分不再重来——这就是 QQ / 企业邮箱可用的断点续传（Gmail 走 API 不用此路径）。
+   *
+   * imapflow 的 fetchOne({ source: { start, maxLength } }) 是 IMAP 的局部 FETCH，
+   * 不传整封邮件，避免流量浪费。
+   */
   private async downloadViaRanges(
     uid: number,
     part: InboundAttachment,
     destTmpPath: string,
     onProgress: ((received: number, total: number) => void) | undefined,
     timeoutMs: number,
-    connections: number
+    connections: number,
+    chunkSize: number
   ): Promise<DownloadAttachmentResult | null> {
     const clients: ImapFlow[] = []
     const emlPath = `${destTmpPath}.eml`
+    const statePath = `${emlPath}.state.json`
+    const { existsSync, readFileSync, writeFileSync, renameSync } = await import('node:fs')
+    const blockSize = Math.max(1 * 1024 * 1024, Math.min(8 * 1024 * 1024, Math.floor(chunkSize) || 4 * 1024 * 1024))
+    type RangeState = { uid: number; part: string; total: number; completed: number[] }
+    const readState = (): RangeState | null => {
+      try {
+        if (!existsSync(statePath)) return null
+        const s = JSON.parse(readFileSync(statePath, 'utf8')) as RangeState
+        if (!s || !Array.isArray(s.completed)) return null
+        return s
+      } catch {
+        return null
+      }
+    }
+    const saveState = (s: RangeState): void => {
+      try {
+        const tmp = `${statePath}.tmp`
+        writeFileSync(tmp, JSON.stringify(s))
+        renameSync(tmp, statePath)
+      } catch {
+        /* ignore */
+      }
+    }
+
     try {
       const main = await this.ensureClient()
       const meta = await main.fetchOne(String(uid), { size: true }, { uid: true })
       if (!meta) return null
       const total = Number((meta as { size?: number }).size ?? 0)
       if (!total || total <= 0) return null
-      const n = Math.max(2, Math.min(8, Math.floor(connections) || 4))
+      const blockCount = Math.ceil(total / blockSize)
       const endpoint = this.endpoint ?? { host: this.cfg.imapHost, port: this.cfg.imapPort, servername: this.cfg.imapHost }
-      // 额外连接（主连接保留给轮询）
-      for (let i = 0; i < n; i++) {
-        const c = new ImapFlow(
-          imapOptionsOf(this.cfg, {
-            host: endpoint.host,
-            port: endpoint.port,
-            tls: { rejectUnauthorized: !this.cfg.allowSelfSigned, servername: endpoint.servername },
-            connectionTimeout: 20_000,
-            greetingTimeout: 20_000,
-            // 并行分段可能很大，给足空闲超时；超时由外层 Promise.race/重试兜底
-            socketTimeout: 10 * 60_000,
-            disableAutoIdle: true
-          })
-        )
-        // 关键：每条额外连接都必须挂 error 监听。
-        // 否则 socket timeout 会以未捕获 'error' 事件冒到 Electron 主进程，弹「A JavaScript error occurred」。
-        c.on('error', (e: Error) => {
-          this.log.warn(`并行下载连接异常：${e.message}`)
-        })
-        c.on('close', () => {
-          /* 连接关闭由 finally 统一清理 */
-        })
-        await c.connect()
-        await c.mailboxOpen('INBOX', { readOnly: true })
-        clients.push(c)
+
+      // 读取续传状态（同一封邮件、同一个 part 才复用）
+      let state = readState()
+      if (!state || state.total !== total || state.uid !== uid || state.part !== part.partId) {
+        state = { uid, part: part.partId, total, completed: [] }
+        saveState(state)
       }
-      const fh = await open(emlPath, 'w')
-      const seg = Math.ceil(total / n)
-      let done = 0
-      const deadline = Date.now() + Math.max(60_000, timeoutMs)
+      const completed = new Set(state.completed)
+      const missing = [...Array(blockCount).keys()].filter((i) => !completed.has(i))
+      if (missing.length === 0) {
+        this.log.info(`断点续传：${part.filename} 已全部下载完成，直接解析本地缓存`)
+      } else if (completed.size > 0) {
+        this.log.info(`断点续传：${part.filename} 已有 ${completed.size}/${blockCount} 块，继续下载剩余 ${missing.length} 块`)
+      }
+
+      // 预分配本地文件（已存在则复用，保留已下载块）
+      const fh = await open(emlPath, existsSync(emlPath) ? 'r+' : 'w')
       try {
+        await fh.truncate(total)
+        const n = Math.max(2, Math.min(8, Math.floor(connections) || 4))
+        for (let i = 0; i < n; i++) {
+          const c = new ImapFlow(
+            imapOptionsOf(this.cfg, {
+              host: endpoint.host,
+              port: endpoint.port,
+              tls: { rejectUnauthorized: !this.cfg.allowSelfSigned, servername: endpoint.servername },
+              connectionTimeout: 20_000,
+              greetingTimeout: 20_000,
+              socketTimeout: 10 * 60_000,
+              disableAutoIdle: true
+            })
+          )
+          // 每条临时连接都必须挂 error 监听，否则 socket timeout 会冒到主进程
+          c.on('error', (e: Error) => this.log.warn(`并行下载连接异常：${e.message}`))
+          await c.connect()
+          await c.mailboxOpen('INBOX', { readOnly: true })
+          clients.push(c)
+        }
+
+        let downloadedBytes = 0
+        for (const i of completed) {
+          downloadedBytes += Math.min(blockSize, total - i * blockSize)
+        }
+        let nextIndex = 0
+        const deadline = Date.now() + Math.max(60_000, timeoutMs)
         await Promise.all(
-          clients.map(async (c, i) => {
-            const start = i * seg
-            const len = Math.min(seg, total - start)
-            if (len <= 0) return
-            const remain = deadline - Date.now()
-            if (remain <= 0) throw new ProviderError('DOWNLOAD_STALLED', '并行下载超时')
-            const r = await c.fetchOne(String(uid), { source: { start, maxLength: len } }, { uid: true })
-            const buf = (r as { source?: Buffer } | false) && !(r as false) ? (r as { source?: Buffer }).source : undefined
-            if (!buf || buf.length === 0) throw new ProviderError('DOWNLOAD_FAILED', `分段 ${i} 为空`)
-            await fh.write(buf, 0, buf.length, start)
-            done += buf.length
-            try {
-              onProgress?.(Math.min(done, total), total)
-            } catch {
-              /* ignore */
+          clients.map(async (c) => {
+            for (;;) {
+              const idx = nextIndex++
+              const i = missing[idx]
+              if (i === undefined) return
+              const start = i * blockSize
+              const len = Math.min(blockSize, total - start)
+              if (Date.now() > deadline) throw new ProviderError('DOWNLOAD_STALLED', '并行下载超时')
+              const r = await c.fetchOne(String(uid), { source: { start, maxLength: len } }, { uid: true })
+              const buf = (r as { source?: Buffer } | false) && !(r as false) ? (r as { source?: Buffer }).source : undefined
+              if (!buf || buf.length === 0) throw new ProviderError('DOWNLOAD_FAILED', `分段 ${i} 为空`)
+              await fh.write(buf, 0, buf.length, start)
+              completed.add(i)
+              downloadedBytes += buf.length
+              saveState({ ...state!, completed: [...completed] })
+              try {
+                onProgress?.(Math.min(downloadedBytes, total), total)
+              } catch {
+                /* ignore */
+              }
             }
           })
         )
       } finally {
         await fh.close().catch(() => {})
       }
+
       // 本地解析出目标附件
       const parsed = await simpleParser(createReadStream(emlPath))
       const wanted = basename(part.filename).toLowerCase()
@@ -1080,11 +1136,14 @@ export class ImapSmtpProvider {
         /* ignore */
       }
       this.log.info(
-        `IMAP 并行下载完成 UID=${uid} ${part.filename}：整封 ${(total / 1048576).toFixed(1)}MB，${n} 连接，附件 ${(content.length / 1048576).toFixed(1)}MB`
+        `IMAP 分块下载完成 UID=${uid} ${part.filename}：整封 ${(total / 1048576).toFixed(1)}MB，附件 ${(content.length / 1048576).toFixed(1)}MB（续传支持已启用）`
       )
+      // 成功后清理中间文件
+      await rm(emlPath, { force: true }).catch(() => {})
+      await rm(statePath, { force: true }).catch(() => {})
       return { size: content.length, sha256: hash, tmpPath: destTmpPath }
     } catch (e) {
-      this.log.warn(`并行下载失败，回退单连接：${e instanceof Error ? e.message : String(e)}`)
+      this.log.warn(`分块下载失败（保留已完成块，下次续传）：${e instanceof Error ? e.message : String(e)}`)
       return null
     } finally {
       for (const c of clients) {
@@ -1098,7 +1157,6 @@ export class ImapSmtpProvider {
           }
         }
       }
-      await rm(emlPath, { force: true }).catch(() => {})
     }
   }
 

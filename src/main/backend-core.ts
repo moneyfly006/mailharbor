@@ -9,7 +9,7 @@ import { mkdirSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { copyIntoDir } from './file-writer'
 import { extractArchiveTo, isArchiveFile } from './archive'
-import type { AccountInput, MainEvent, TestResult } from '@shared/types'
+import type { Account, AccountInput, MainEvent, TestResult } from '@shared/types'
 import type { DB } from './db'
 import * as repos from './repos'
 import type { SecretsCodec } from './repos'
@@ -22,9 +22,12 @@ import {
   providerConfigFromAccount, providerConfigFromInput, testConnection, type ProviderConfig
 } from './providers/imap'
 import { testSmtpConnection } from './smtp'
+import { GmailApiClient } from './gmail/client'
+import { startGmailAuth } from './gmail/oauth'
+import { resolveProxy } from './net/proxy'
 import type { TestResultLine } from '@shared/types'
 import { sendReply as smtpSendReply, buildReplyVars, renderTemplate, type ReplyRequest, type SendReplyResult } from './smtp'
-import { setLogLevel } from './log'
+import { createLogger, setLogLevel } from './log'
 import type { Backend } from './services'
 import { matchRules, normalize, stripSubjectPrefix } from './rule-engine'
 
@@ -154,6 +157,70 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     now,
     send: deps.sendReply ?? smtpSendReply
   })
+  // ---------------------------------------------------------------------------
+  // Gmail API 加速（混合模式：收信仍走 IMAP，附件下载优先走 HTTPS API）
+  // ---------------------------------------------------------------------------
+  const gmailClients = new Map<number, GmailApiClient>()
+  const gmailClientFor = async (accountId: number): Promise<GmailApiClient | null> => {
+    const row = repos.getOAuthToken(accountId)
+    if (!row) return null
+    const cached = gmailClients.get(accountId)
+    if (cached) return cached
+    const secrets = repos.getOAuthSecrets(accountId)
+    if (!secrets.refreshToken) return null
+    let proxy = null
+    try {
+      proxy = await resolveProxy(deps.getSetting('proxy'))
+    } catch {
+      proxy = null
+    }
+    const client = new GmailApiClient({
+      clientId: row.client_id,
+      clientSecret: secrets.clientSecret,
+      refreshToken: secrets.refreshToken,
+      proxy,
+      logger: createLogger('gmail-api')
+    })
+    gmailClients.set(accountId, client)
+    return client
+  }
+
+  const gmailDownloader = {
+    async download(opts: {
+      account: Account
+      rfcMessageId: string
+      filename: string
+      declaredSize: number
+      destPath: string
+      onProgress: (received: number, total: number) => void
+      timeoutMs: number
+    }): Promise<{ size: number; sha256: string; tmpPath: string } | null> {
+      if (deps.getSetting<boolean>('gmailApiAccel') === false) return null
+      const client = await gmailClientFor(opts.account.id)
+      if (!client) return null
+      try {
+        const r = await client.downloadAttachmentByRfc822({
+          rfcMessageId: opts.rfcMessageId,
+          filename: opts.filename,
+          declaredSize: opts.declaredSize,
+          destPath: opts.destPath,
+          onProgress: opts.onProgress,
+          timeoutMs: opts.timeoutMs
+        })
+        repos.markOAuthError(opts.account.id, null)
+        return r
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        // refresh_token 失效（测试模式 7 天）时记录下来，UI 会提示重新授权
+        if (/invalid_grant|授权已过期|refresh_token/i.test(msg)) {
+          repos.markOAuthError(opts.account.id, msg)
+          emit({ type: 'gmail:auth', accountId: opts.account.id, authorized: false, error: msg })
+        }
+        throw e
+      }
+    }
+  }
+
   const pipeline = new MailPipeline({
     emit,
     getSetting: deps.getSetting,
@@ -161,6 +228,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     replyService,
     tmpDir: deps.tmpDir,
     linkedFiles: deps.linkedFiles,
+    gmail: gmailDownloader,
     now
   })
   dispatcher.onSettled = (messageId) => pipeline.onDeliveriesSettled(messageId)
@@ -242,6 +310,31 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     void runAutoRetryOnce().catch(() => {})
   }
 
+  /** 启动时清理 24 小时前的下载临时文件（.part/.eml），避免磁盘越占越多 */
+  function cleanTempFiles(): void {
+    try {
+      const { readdirSync, statSync, rmSync } = require('node:fs') as typeof import('node:fs')
+      const { join } = require('node:path') as typeof import('node:path')
+      const cutoff = Date.now() - 24 * 3600_000
+      let removed = 0
+      for (const name of readdirSync(deps.tmpDir)) {
+        if (!/\.(part|eml|zip|rar|7z)$/i.test(name)) continue
+        const full = join(deps.tmpDir, name)
+        try {
+          if (statSync(full).mtimeMs < cutoff) {
+            rmSync(full, { force: true })
+            removed++
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (removed > 0) console.log(`[backend] 已清理 ${removed} 个过期临时文件`)
+    } catch {
+      /* ignore */
+    }
+  }
+
   let disposed = false
   const backend: Backend = {
     bus: deps.bus,
@@ -262,6 +355,74 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       nextCheckAt: () => scheduler.nextCheckAt(),
       isChecking: () => scheduler.isChecking(),
       lastCheckAt: () => scheduler.lastCheckAt()
+    },
+    gmail: {
+      status: (): Array<{
+        accountId: number
+        email: string
+        provider: string
+        expiry: number | null
+        daysLeft: number | null
+        needsReauth: boolean
+        lastError: string | null
+      }> =>
+        repos.listOAuthTokens().map((r) => ({
+          accountId: r.account_id,
+          email: r.email,
+          provider: r.provider,
+          expiry: r.expiry,
+          // 测试模式下 refresh_token 7 天过期，按授权时间（updated_at）计算剩余天数
+          daysLeft: Math.max(0, Math.ceil(7 - (Date.now() - r.updated_at) / 86400_000)),
+          needsReauth: Boolean(r.last_error),
+          lastError: r.last_error
+        })),
+      startAuth: async (accountId: number, clientId: string, clientSecret: string) => {
+        const account = repos.getAccount(accountId)
+        if (!account) throw new Error('账户不存在')
+        if (account.preset !== 'gmail' && account.preset !== 'google_workspace') {
+          throw new Error('Gmail 加速仅适用于 Gmail / Google Workspace 账户')
+        }
+        let proxy = null
+        try {
+          proxy = await resolveProxy(deps.getSetting('proxy'))
+        } catch {
+          proxy = null
+        }
+        const session = await startGmailAuth({ clientId, clientSecret, proxy })
+        void session.wait
+          .then((tokens) => {
+            repos.saveOAuthToken({
+              accountId,
+              provider: 'gmail',
+              email: account.email,
+              clientId,
+              clientSecret,
+              refreshToken: tokens.refreshToken,
+              accessToken: tokens.accessToken,
+              expiry: tokens.expiry
+            })
+            gmailClients.delete(accountId)
+            emit({ type: 'gmail:auth', accountId, authorized: true })
+            emit({ type: 'toast', level: 'success', title: 'Gmail 加速已授权', body: '附件将优先走 Gmail API 下载' })
+            emit({ type: 'dashboard:changed' })
+          })
+          .catch((e) => {
+            emit({ type: 'gmail:auth', accountId, authorized: false, error: e instanceof Error ? e.message : String(e) })
+            emit({ type: 'toast', level: 'error', title: 'Gmail 授权失败', body: e instanceof Error ? e.message : String(e) })
+          })
+        return { authUrl: session.authUrl, cancel: session.cancel }
+      },
+      revoke: (accountId: number) => {
+        repos.deleteOAuthToken(accountId)
+        gmailClients.delete(accountId)
+        emit({ type: 'gmail:auth', accountId, authorized: false })
+        emit({ type: 'dashboard:changed' })
+      },
+      test: async (accountId: number) => {
+        const client = await gmailClientFor(accountId)
+        if (!client) return { ok: false, message: '尚未授权 Gmail API' }
+        return client.test()
+      }
     },
     async testAccount(input: AccountInput): Promise<TestResult> {
       if (!input?.password) return failedTest('请填写应用专用密码 / 授权码后再测试连接', 'imap', input)
@@ -476,6 +637,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     async init(): Promise<void> {
       dispatcher.start()
       startAutoRetry()
+      cleanTempFiles()
       // 上次运行被强行关闭/断网时，邮件会停在「处理中」：启动后标记为失败，让用户能点「重试下载」
       try {
         const stuck = repos.listStuckQueuedMessages(5 * 60_000)

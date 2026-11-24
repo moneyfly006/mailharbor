@@ -646,3 +646,18 @@
   padding: 0 3px;
   line-height: 1.4;
 }
+
+.ex-tag {
+  font-size: 9.5px;
+  color: var(--color-success, #2C6B4B);
+  border: 1px solid rgba(44, 107, 75, 0.3);
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.ex-tag.bad {
+  color: var(--color-danger, #A8341F);
+  border-color: rgba(168, 52, 31, 0.3);
+}

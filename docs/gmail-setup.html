@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>邮箱资料助手 · Gmail API 加速配置指南</title>
+<style>
+  :root{
+    --ink:#16202B; --ink2:#333F4C; --ink3:#5E6873; --ink4:#7C858F;
+    --paper:#FAF7F0; --paper2:#F5F1E7; --rule:rgba(22,32,43,.12);
+    --red:#C8422D; --red2:#A83321; --green:#2C6B4B; --amber:#96660F;
+    --serif:"Songti SC","Source Han Serif SC",Georgia,serif;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{font-family:var(--sans);color:var(--ink);font-size:10.5pt;line-height:1.72;background:#fff}
+  h1,h2,h3,h4{font-family:var(--serif);font-weight:600;margin:0}
+  h1{font-size:28pt;line-height:1.25}
+  h2{font-size:17pt;margin:0 0 3mm;padding-bottom:2.5mm;border-bottom:1px solid var(--rule)}
+  h3{font-size:12.5pt;margin:6mm 0 2mm}
+  h4{font-size:11pt;margin:4mm 0 1.5mm;color:var(--ink2)}
+  p{margin:0 0 2.5mm}
+  code,kbd{font-family:var(--mono);font-size:9.5pt;background:var(--paper2);padding:.4mm 1.4mm;border-radius:1mm;border:1px solid rgba(22,32,43,.08)}
+  .muted{color:var(--ink3)}
+  .kicker{font-family:var(--mono);font-size:8.5pt;letter-spacing:.32em;color:var(--red);text-transform:uppercase}
+  section.page{page-break-before:always;page-break-after:auto}
+  section.page.cover{page-break-before:avoid;page-break-after:always}
+  h2,h3,h4{page-break-after:avoid}
+  .cover{height:235mm;display:flex;flex-direction:column;justify-content:center}
+  .cover .t{margin:8mm 0 5mm}
+  .cover .lead{font-size:12pt;color:var(--ink2);max-width:150mm;line-height:1.85}
+  .cover .meta{margin-top:14mm;padding-top:5mm;border-top:1px solid var(--rule);font-family:var(--mono);font-size:8.5pt;color:var(--ink4);line-height:2}
+  .toc{margin:4mm 0 0;padding:0;list-style:none;font-size:10.5pt}
+  .toc li{display:flex;justify-content:space-between;gap:8mm;padding:1.6mm 0;border-bottom:1px dotted var(--rule)}
+  .steps{counter-reset:step;margin:0 0 3mm;padding:0;list-style:none}
+  .steps>li{counter-increment:step;position:relative;padding:0 0 3mm 11mm;break-inside:avoid}
+  .steps>li:before{content:counter(step);position:absolute;left:0;top:.4mm;width:6.4mm;height:6.4mm;border:1px solid var(--red);color:var(--red2);
+    border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:8.5pt;background:#fff}
+  .steps>li b{display:inline;font-weight:600}
+  .steps>li > b:first-child{display:block;font-weight:600;margin-bottom:.6mm}
+  .note,.warn,.tip{border-left:2px solid;padding:2.6mm 3.4mm;margin:3mm 0;font-size:9.6pt;line-height:1.68;break-inside:avoid}
+  .note{border-color:var(--ink4);background:var(--paper)}
+  .warn{border-color:var(--red);background:#FFF7F4}
+  .tip{border-color:var(--green);background:#F3F7F2}
+  table{width:100%;border-collapse:collapse;margin:3mm 0 4mm;font-size:9.3pt;break-inside:avoid}
+  th,td{border:1px solid var(--rule);padding:1.8mm 2.4mm;text-align:left;vertical-align:top}
+  th{background:var(--paper2);font-weight:600;font-size:9pt}
+  figure{margin:3mm 0 4mm;break-inside:avoid}
+  figure img{width:100%;border:1px solid var(--rule);border-radius:1.2mm;display:block}
+  figcaption{font-size:8.8pt;color:var(--ink3);margin-top:1.6mm}
+  .kv td:first-child{width:34mm;color:var(--ink3);white-space:nowrap}
+  .badge{display:inline-block;font-family:var(--mono);font-size:8pt;padding:.3mm 1.6mm;border-radius:1mm;border:1px solid var(--rule);background:var(--paper)}
+  .badge.red{color:var(--red2);border-color:rgba(200,66,45,.4);background:#FFF7F4}
+  .badge.green{color:var(--green);border-color:rgba(44,107,75,.35);background:#F3F7F2}
+  @page{size:A4 portrait;margin:16mm 15mm 14mm}
+  @media print{ body{background:#fff} .cover{height:auto} }
+
+  /* ---------------- Google Cloud 示意图（CSS 绘制） ---------------- */
+  .mockup{border:1px solid var(--rule);border-radius:1.6mm;overflow:hidden;font-size:8.6pt;background:#fff;margin:3mm 0 1mm}
+  .mk-bar{display:flex;align-items:center;gap:2mm;background:#F1F3F4;border-bottom:1px solid var(--rule);padding:1.4mm 2.4mm;font-family:var(--mono);font-size:7.4pt;color:var(--ink3)}
+  .mk-dot{width:2.2mm;height:2.2mm;border-radius:50%;background:#C8CDD2}
+  .mk-body{display:flex;min-height:46mm}
+    .mk-side{width:42mm;border-right:1px solid var(--rule);background:#F8F9FA;padding:2mm 1.4mm;color:var(--ink2);line-height:1.9;font-size:7.4pt;white-space:nowrap}
+  .mk-main{flex:1;padding:2.4mm 3mm}
+  .mk-row{display:flex;align-items:center;gap:2mm;margin:1.2mm 0}
+  .mk-btn{display:inline-block;border:1px solid #1A73E8;color:#1A73E8;border-radius:1mm;padding:.5mm 2.2mm;font-size:7.8pt;background:#fff}
+  .mk-btn.primary{background:#1A73E8;color:#fff}
+  .mk-input{flex:1;border:1px solid #C8CDD2;border-radius:1mm;padding:.9mm 1.6mm;color:var(--ink3);font-family:var(--mono);font-size:7.6pt;background:#fff}
+  .mk-label{color:var(--ink3);font-size:7.4pt;margin:.6mm 0}
+  .mk-arrow{position:relative;display:inline-block;color:var(--red2);font-weight:700}
+  .mk-hl{outline:1.6px solid var(--red);outline-offset:1px;border-radius:1mm}
+  .mk-tag{display:inline-block;background:var(--red);color:#fff;font-family:var(--mono);font-size:7pt;border-radius:50%;width:3.6mm;height:3.6mm;text-align:center;line-height:3.6mm;margin-right:1mm}
+  .mk-hint{font-size:8.2pt;color:var(--ink3)}
+</style>
+</head>
+<body>
+
+<!-- ================= 封面 ================= -->
+<section class="page cover">
+  <div class="kicker">邮箱资料助手 · Gmail API 加速配置指南</div>
+  <div class="t"><h1>让 Gmail 附件<br>下载快 4–5 倍</h1></div>
+  <p class="lead">
+    这份文档手把手教你在 Google Cloud 里创建 OAuth 客户端、在软件里完成授权，
+    并说明「令牌为什么会 7 天过期」「发布应用会不会审核不通过」这些容易踩坑的问题。
+    照着做约 10 分钟，之后 Gmail 附件自动走 HTTPS 下载，速度从约 0.35MB/s 提升到 1.5–2.2MB/s。
+  </p>
+  <div class="meta">
+    适用版本：v0.1.29 及以上（Windows 10 / 11 x64）<br>
+    文档版本：v1.0 · 2026-11-24<br>
+    配套文档：配置说明书 PDF、README.md
+  </div>
+</section>
+
+<!-- ================= 目录 ================= -->
+<section class="page">
+  <h2>目录</h2>
+  <ul class="toc">
+    <li><b>1. 这套加速是什么</b><span>原理 · 实测速度 · 对现有功能的影响</span></li>
+    <li><b>2. 开始前准备</b><span>账号 · 网络 · 权限</span></li>
+    <li><b>3. 创建 Google Cloud 项目</b><span>项目 · 启用 Gmail API</span></li>
+    <li><b>4. 配置 OAuth 同意屏幕</b><span>品牌信息 · 受众群体 · 测试用户 · 数据访问范围</span></li>
+    <li><b>5. 创建 OAuth 客户端</b><span>桌面应用 · 客户端 ID / 密钥</span></li>
+    <li><b>6. 在软件里授权</b><span>填写配置 · 浏览器授权 · 状态确认</span></li>
+    <li><b>7. 验证与排错</b><span>测试按钮 · 常见错误对照表</span></li>
+    <li><b>8. 令牌续期与「发布应用」</b><span>7 天限制 · 发布审核真相 · 三种方案</span></li>
+    <li><b>9. 安全与撤销</b><span>密钥保管 · 撤销授权</span></li>
+    <li><b>10. 附录</b><span>命令行测速 · IMAP 断点续传说明</span></li>
+  </ul>
+
+  <h3>先看结论（不想读全文的话）</h3>
+  <table>
+    <tr><th style="width:30mm">你关心的问题</th><th>答案</th></tr>
+    <tr><td>能快多少</td><td>实测 Gmail 附件从 <b>0.35MB/s</b> 提升到 <b>1.5–2.2MB/s</b>，约 <b>4–5 倍</b>；18MB 附件从约 50 秒降到约 8–9 秒。</td></tr>
+    <tr><td>要花多久配</td><td>Google Cloud 里约 8 分钟 + 软件里 1 分钟；只需配一次（7 天重新点一次授权，见第 8 节）。</td></tr>
+    <tr><td>要不要花钱</td><td>不需要。Gmail API 有免费额度，个人用量远低于上限。</td></tr>
+    <tr><td>会不会审核不通过</td><td><b>不要把应用「发布」到生产</b>：`gmail.readonly` 属于受限范围，正式发布要 Google 验证 + CASA 安全评估（费用高、周期长）。保持「测试中」模式即可正常使用。</td></tr>
+    <tr><td>收信、回信会变吗</td><td>不会。收信仍走 IMAP，回信仍走 SMTP；只有<b>附件下载</b>改走 Gmail API，失败自动回退 IMAP。</td></tr>
+  </table>
+</section>
+
+<!-- ================= 1 原理 ================= -->
+<section class="page">
+  <h2>1. 这套加速是什么</h2>
+  <p>
+    Gmail 对 IMAP 附件下载有服务端限速，单连接大致只有 0.3–0.8MB/s；
+    而 Gmail API 走的是普通 HTTPS 通道，和浏览器访问同一套网络，速度明显更高。
+    软件的做法是「<b>收信仍走 IMAP，附件下载优先走 Gmail API</b>」：
+  </p>
+  <table>
+    <tr><th style="width:34mm">环节</th><th>通道</th><th>说明</th></tr>
+    <tr><td>收信 / 轮询 / 垃圾箱</td><td>IMAP</td><td>不变，UID 游标、去重逻辑都不动</td></tr>
+    <tr><td><b>附件下载</b></td><td><b>Gmail API（HTTPS）</b></td><td>需要你完成一次 OAuth 授权</td></tr>
+    <tr><td>下载失败</td><td>自动回退 IMAP</td><td>API 不可用时不影响收件</td></tr>
+    <tr><td>自动回信</td><td>SMTP</td><td>不变，仍用应用专用密码</td></tr>
+  </table>
+  <h3>实测速度（同一台电脑、同一网络）</h3>
+  <table>
+    <tr><th>附件</th><th>IMAP</th><th>Gmail API</th><th>提升</th></tr>
+    <tr><td>18.0MB ZIP</td><td>51.6s（0.35MB/s）</td><td>8.8s（2.04MB/s）</td><td><b>5.8 倍</b></td></tr>
+    <tr><td>12.0MB ZIP</td><td>—</td><td>7.6s（1.58MB/s）</td><td>—</td></tr>
+    <tr><td>26.0MB ZIP</td><td>—</td><td>18.1s（1.44MB/s）</td><td>—</td></tr>
+    <tr><td>两个 8MB 附件</td><td>约 14.6s（串行）</td><td>9.4s（并发）</td><td>约省 35%</td></tr>
+  </table>
+  <div class="tip"><b>提示：</b>速度受你的代理/带宽影响，波动属正常；实测区间约 1.4–2.2MB/s。</div>
+</section>
+
+<!-- ================= 2 准备 ================= -->
+<section class="page">
+  <h2>2. 开始前准备</h2>
+  <table class="kv">
+    <tr><td>Gmail 账号</td><td>要收件的 Gmail 地址（例如 <code>moneyflysubssr@gmail.com</code>）。</td></tr>
+    <tr><td>网络</td><td>能打开 Google Cloud 控制台（需要代理）；软件下载附件时也会走系统代理。</td></tr>
+    <tr><td>软件版本</td><td>v0.1.29 及以上（「邮箱账户」页有「Gmail 加速（API）」卡片）。</td></tr>
+    <tr><td>时间</td><td>首次配置约 10 分钟。</td></tr>
+  </table>
+  <div class="note"><b>为什么要自己创建 OAuth 客户端？</b>Google 要求每个应用有自己的客户端 ID；你自己创建，授权数据只留在你的电脑上，不经过任何第三方服务器。</div>
+</section>
+
+<!-- ================= 3 创建项目 ================= -->
+<section class="page">
+  <h2>3. 创建 Google Cloud 项目并启用 Gmail API</h2>
+
+  <h3>3.1 创建项目</h3>
+  <ol class="steps">
+    <li><b>打开控制台</b>浏览器访问 <code>console.cloud.google.com</code>，用要收件的 Gmail 账号登录。</li>
+    <li><b>新建项目</b>顶部项目选择器 →「新建项目」→ 名称填 <code>MailHarbor</code> →「创建」。</li>
+    <li><b>确认项目</b>页面左上角显示 <code>MailHarbor</code>，说明当前操作在新项目里。</li>
+  </ol>
+
+  <h3>3.2 启用 Gmail API</h3>
+  <ol class="steps">
+    <li><b>进入 API 库</b>左侧「API 和服务」→「库」。</li>
+    <li><b>搜索并启用</b>搜索 <code>Gmail API</code> → 点进详情 → 点「<b>启用</b>」。</li>
+    <li><b>确认状态</b>返回后能看到「Gmail API 已启用」。</li>
+  </ol>
+
+  <figure class="mockup">
+    <div class="mk-bar"><span class="mk-dot"></span><span class="mk-dot"></span><span class="mk-dot"></span>
+      <span style="margin-left:2mm">console.cloud.google.com/apis/library/gmail.googleapis.com</span></div>
+    <div class="mk-body">
+      <div class="mk-side">☰ Cloud<br>▸ API 和服务<br>&nbsp;&nbsp;· 库<br>&nbsp;&nbsp;· 凭据<br>▸ IAM</div>
+      <div class="mk-main">
+        <div class="mk-row"><b>Gmail API</b> <span class="mk-tag">1</span><span class="mk-hint">搜索 Gmail API 后点进详情</span></div>
+        <div class="mk-row"><span class="mk-btn primary mk-hl">启用</span> <span class="mk-tag">2</span><span class="mk-hint">点「启用」按钮（示意图）</span></div>
+        <div class="mk-row mk-hint">启用后状态显示：已启用 ✓</div>
+      </div>
+    </div>
+  </figure>
+  <figcaption>图 3-1　启用 Gmail API（示意图，实际界面以 Google 为准）</figcaption>
+</section>
+
+<!-- ================= 4 同意屏幕 ================= -->
+<section class="page">
+  <h2>4. 配置 OAuth 同意屏幕（最容易漏的一步）</h2>
+  <p>
+    新版控制台在左侧「<b>Google Auth Platform</b>」或「OAuth 同意屏幕」下，分四块：
+    <b>品牌信息、受众群体（测试用户）、数据访问（范围）、客户端</b>。
+  </p>
+
+  <h3>4.1 品牌信息（应用信息）</h3>
+  <ol class="steps">
+    <li><b>应用名称</b>填 <code>MailHarbor</code>（或任意）。</li>
+    <li><b>用户支持邮箱</b>选你的 Gmail 地址。</li>
+    <li><b>联系信息</b>填同一个邮箱，勾选同意条款，点「创建」。</li>
+  </ol>
+
+  <h3>4.2 受众群体：保持「外部」+ 添加测试用户</h3>
+  <ol class="steps">
+    <li><b>用户类型</b>选「<b>外部</b>」；个人 Gmail 只能选外部，若你有 Workspace 企业邮箱可选「内部」（免验证、令牌长期有效）。</li>
+    <li><b>发布状态</b>保持「<b>测试中</b>」——不要点「发布应用」（原因见第 8 节）。</li>
+    <li><b>添加测试用户</b>「目标对象 / 受众群体」→「测试用户」→「+ 添加用户」→ 填 <b>你的 Gmail 地址</b> → 点「保存」。</li>
+  </ol>
+  <div class="warn"><b>必须加测试用户！</b>否则授权页会报 <code>403 access_denied</code>：「应用正在测试中，仅供已获开发者批准的测试人员使用」。</div>
+
+  <figure class="mockup">
+    <div class="mk-bar"><span class="mk-dot"></span><span class="mk-dot"></span><span class="mk-dot"></span>
+      <span style="margin-left:2mm">Google Auth Platform / 目标对象</span></div>
+    <div class="mk-body">
+      <div class="mk-side">☰ Google Auth Platform<br>· 概览<br>· 品牌塑造<br>▸ 目标对象<br>· 客户端<br>· 数据访问</div>
+      <div class="mk-main">
+        <div class="mk-row"><b>受众群体</b> <span class="mk-hint">发布状态：测试中</span></div>
+        <div class="mk-row"><span class="mk-btn mk-hl">+ Add users</span> <span class="mk-tag">1</span><span class="mk-hint">点「添加用户」</span></div>
+        <div class="mk-row mk-input mk-hl">moneyflysubssr@gmail.com <span class="mk-tag">2</span></div>
+        <div class="mk-row" style="justify-content:flex-end"><span class="mk-btn primary">保存</span> <span class="mk-tag">3</span></div>
+      </div>
+    </div>
+  </figure>
+  <figcaption>图 4-1　添加测试用户（示意图）</figcaption>
+
+  <h3>4.3 数据访问：添加只读范围</h3>
+  <ol class="steps">
+    <li>左侧「<b>数据访问 / Data access</b>」→「添加或移除范围」。</li>
+    <li>搜索并勾选：<code>https://www.googleapis.com/auth/gmail.readonly</code>（只读，不能删信、不能发信）。</li>
+    <li>点「保存」。</li>
+  </ol>
+</section>
+
+<!-- ================= 5 客户端 ================= -->
+<section class="page">
+  <h2>5. 创建 OAuth 客户端（桌面应用）</h2>
+  <ol class="steps">
+    <li><b>进入客户端</b>左侧「<b>客户端</b>」→「创建客户端」。</li>
+    <li><b>应用类型</b>选「<b>桌面应用</b>」（Desktop app，不要选 Web）。</li>
+    <li><b>名称</b>填 <code>MailHarbor-Desktop</code> →「创建」。</li>
+    <li><b>复制两项</b>弹窗里复制：
+      <br>① 客户端 ID（形如 <code>11622102430-xxxx.apps.googleusercontent.com</code>）
+      <br>② 客户端密钥（形如 <code>GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx</code>）
+      <br><b>这一次没复制，关掉弹窗就看不到了</b>（可删除重建，或点「重置密钥」）。</li>
+  </ol>
+  <div class="tip"><b>密钥很敏感</b>：只填进本软件，不要发到群里、不要提交到代码仓库。软件会把它加密保存在本机数据库。</div>
+
+  <figure class="mockup">
+    <div class="mk-bar"><span class="mk-dot"></span><span class="mk-dot"></span><span class="mk-dot"></span>
+      <span style="margin-left:2mm">Google Auth Platform / 客户端 / 创建客户端</span></div>
+    <div class="mk-body">
+      <div class="mk-side">☰ Google Auth Platform<br>· 概览<br>· 目标对象<br>▸ 客户端<br>· 数据访问</div>
+      <div class="mk-main">
+        <div class="mk-row"><span class="mk-label">应用类型</span></div>
+        <div class="mk-row"><span class="mk-input mk-hl">桌面应用 ▾ <span class="mk-tag">1</span></span></div>
+        <div class="mk-row"><span class="mk-label">名称</span></div>
+        <div class="mk-row"><span class="mk-input">MailHarbor-Desktop <span class="mk-tag">2</span></span></div>
+        <div class="mk-row"><span class="mk-btn primary mk-hl">创建</span> <span class="mk-tag">3</span><span class="mk-hint">创建后立刻复制 ID 和密钥</span></div>
+      </div>
+    </div>
+  </figure>
+  <figcaption>图 5-1　创建桌面应用客户端（示意图）</figcaption>
+</section>
+
+<!-- ================= 6 软件授权 ================= -->
+<section class="page">
+  <h2>6. 在软件里填写并授权</h2>
+  <ol class="steps">
+    <li><b>打开卡片</b>软件 →「<b>邮箱账户</b>」页，最上方有「Gmail 加速（API）」卡片。</li>
+    <li><b>展开配置</b>点右上角「配置 OAuth 客户端」。</li>
+    <li><b>填两项</b>粘贴客户端 ID、客户端密钥。</li>
+    <li><b>点授权</b>点「授权 Gmail 加速」→ 浏览器自动打开 Google 授权页。</li>
+    <li><b>点允许</b>在浏览器登录并点「继续 / 允许」（测试模式会提示「Google 尚未验证此应用」，点「继续」即可）。</li>
+    <li><b>确认状态</b>回到软件，卡片显示 <span class="badge green">已授权 · 剩 7 天</span> 即成功。</li>
+  </ol>
+
+  <figure><img src="img/gmail-accel-card.png" alt="Gmail 加速卡片"></figure>
+  <figcaption>图 6-1　「邮箱账户」页的 Gmail 加速卡片（实际界面）</figcaption>
+
+  <figure><img src="img/gmail-accel-config.png" alt="填写 OAuth 客户端"></figure>
+  <figcaption>图 6-2　填写客户端 ID / 密钥（实际界面）</figcaption>
+
+  <h3>授权完成后可以做的操作</h3>
+  <table>
+    <tr><th style="width:30mm">按钮</th><th>作用</th></tr>
+    <tr><td>测试</td><td>调用 Gmail API 读取账号信息，确认令牌可用</td></tr>
+    <tr><td>重新授权</td><td>令牌过期/失效后重新走一次浏览器授权</td></tr>
+    <tr><td>关闭加速</td><td>删除本机令牌，附件改回 IMAP 下载</td></tr>
+    <tr><td>下载记录 → 下载设置 → Gmail 加速</td><td>全局开关（开启/关闭 HTTPS 下载）</td></tr>
+  </table>
+</section>
+
+<!-- ================= 7 验证与排错 ================= -->
+<section class="page">
+  <h2>7. 验证与排错</h2>
+  <h3>7.1 验证步骤</h3>
+  <ol class="steps">
+    <li>在卡片上点「测试」，出现「Gmail API 连通」提示。</li>
+    <li>用 QQ 或其他邮箱给 Gmail 发一封<b>标题含规则关键词</b>、带 10MB 以上 ZIP 的邮件。</li>
+    <li>「下载记录」里该邮件 1 分钟内变为「已归档」，附件大小正确。</li>
+    <li>日志出现：<code>Gmail API 附件下载完成：xxx.zip 12.0MB / 7.6s</code> 说明走的是加速通道。</li>
+  </ol>
+
+  <h3>7.2 常见错误对照表</h3>
+  <table>
+    <tr><th style="width:44mm">报错</th><th>原因</th><th>处理</th></tr>
+    <tr><td><code>403 access_denied</code><br>「应用正在测试中」</td><td>登录的账号不在测试用户列表</td><td>按 4.2 添加测试用户并<b>保存</b>，等 1–5 分钟后重试</td></tr>
+    <tr><td><code>401 invalid_client</code><br>「OAuth client was not found」</td><td>客户端 ID 不完整/抄错，或客户端被删除</td><td>到「客户端」列表点复制，不要手抄；确认 ID 完整</td></tr>
+    <tr><td><code>invalid_client</code><br>「client secret is invalid」</td><td>密钥抄错（大小写/数字看错）</td><td>到客户端详情「重置密钥」，把新密钥完整粘贴</td></tr>
+    <tr><td><code>invalid_grant</code></td><td>刷新令牌过期（测试模式 7 天）或已被撤销</td><td>点「重新授权」重新走一次</td></tr>
+    <tr><td>Gmail API has not been used in project …</td><td>Gmail API 没启用</td><td>按第 3 节启用 Gmail API，等 1–2 分钟</td></tr>
+    <tr><td>授权后下载仍慢</td><td>全局开关被关闭 / 账号不是 Gmail / 会话超时</td><td>检查「下载设置 → Gmail 加速」为开；日志确认走的是 API</td></tr>
+    <tr><td>浏览器打不开授权页</td><td>代理问题</td><td>确认系统代理可用；软件下载与授权都走系统代理</td></tr>
+  </table>
+</section>
+
+<!-- ================= 8 令牌 ================= -->
+<section class="page">
+  <h2>8. 令牌续期与「发布应用」的真相</h2>
+  <p>很多人卡在这里：授权成功，但 7 天后突然失效。原因是 Google 对「测试中」应用的限制。</p>
+
+  <h3>8.1 两种令牌</h3>
+  <table>
+    <tr><th style="width:34mm">令牌</th><th>有效期</th><th>软件怎么处理</th></tr>
+    <tr><td>访问令牌</td><td>1 小时</td><td><b>自动续期</b>，你完全无感</td></tr>
+    <tr><td>刷新令牌</td><td><b>测试模式 7 天</b></td><td>到期后需重新授权一次（卡片会显示剩余天数）</td></tr>
+  </table>
+
+  <h3>8.2 为什么不能「自动续」刷新令牌？</h3>
+  <p>这是 Google 服务端策略：测试状态下刷新令牌 7 天强制失效，任何客户端代码都无法绕过。软件能做的是：提前显示剩余天数、失效时在卡片上标红提示、下载自动回退 IMAP 不丢件、一键重新授权。</p>
+
+  <h3>8.3 三种方案对比</h3>
+  <table>
+    <tr><th style="width:36mm">方案</th><th>效果</th><th>代价</th></tr>
+    <tr><td><b>保持「测试中」</b>（推荐）</td><td>可用；7 天重新点一次授权（约 10 秒）</td><td>无；软件已有提醒</td></tr>
+    <tr><td>发布到「生产」（不验证）</td><td>受限范围会被拒绝授权，反而更糟</td><td>不可行</td></tr>
+    <tr><td>发布并提交验证</td><td>长期有效、无警告</td><td>隐私政策、演示视频、CASA 安全评估（数千美元、数周）</td></tr>
+    <tr><td><b>Workspace「内部应用」</b></td><td>长期有效、免验证</td><td>需要企业邮箱（Google Workspace）</td></tr>
+  </table>
+  <div class="warn"><b>结论：不要点「发布应用」。</b><code>gmail.readonly</code> 属于「受限范围」，未验证应用发布后授权会被 Google 拒绝；自用场景保持「测试中」最划算。</div>
+
+  <h3>8.4 如果你有 Workspace 企业邮箱</h3>
+  <p>把 OAuth 用户类型改成「内部」（Internal），仅组织内账号可用，免 Google 验证，刷新令牌长期有效，不需要每 7 天重新授权。</p>
+</section>
+
+<!-- ================= 9 安全 ================= -->
+<section class="page">
+  <h2>9. 安全与撤销</h2>
+  <ul class="steps">
+    <li><b>最小权限</b>只申请 <code>gmail.readonly</code>，软件无法删除邮件、无法用 API 发信（回信走 SMTP）。</li>
+    <li><b>本机加密</b>客户端密钥与刷新令牌使用系统级加密（Windows DPAPI / macOS Keychain）保存在本机数据库。</li>
+    <li><b>吊销授权</b>Google 账号 →「安全」→「第三方应用与您共享的数据」→ 找到 MailHarbor → 移除访问权限；软件里同时点「关闭加速」。</li>
+    <li><b>重置密钥</b>怀疑泄露时，到 Google Cloud「客户端」→ 重置密钥，然后在软件里重新授权。</li>
+  </ul>
+</section>
+
+<!-- ================= 10 附录 ================= -->
+<section class="page">
+  <h2>10. 附录</h2>
+  <h3>10.1 命令行测速（可选）</h3>
+  <p>软件内已有速度显示；如果想单独对比 Gmail API 与 IMAP，可在安装目录运行：</p>
+  <pre style="background:var(--paper);border:1px solid var(--rule);border-radius:1.4mm;padding:3mm;font-family:var(--mono);font-size:8.6pt;line-height:1.8">node scripts/gmail-api-speed.mjs --client-id=你的ID --client-secret=你的密钥
+# 或复用已保存令牌
+node scripts/gmail-api-speed.mjs</pre>
+  <p>脚本会打印授权链接、下载一个 5–60MB 附件并输出速度；令牌保存在用户目录，7 天有效。</p>
+
+  <h3>10.2 IMAP 断点续传说明</h3>
+  <p>
+    除 Gmail API 外，软件对 IMAP 大附件还支持「分块下载 + 断点续传」：把整封邮件按 4MB 分块并行拉取，
+    已完成块记录在本地状态文件里；网络中断后重试只补缺失块，不从头重下。
+  </p>
+  <table>
+    <tr><th style="width:40mm">邮箱</th><th>是否支持分块/续传</th><th>说明</th></tr>
+    <tr><td>Gmail</td><td>支持（但优先走 API）</td><td>API 更快，IMAP 仅作兜底</td></tr>
+    <tr><td>QQ 邮箱 / 163 等</td><td>部分服务器不支持局部 FETCH</td><td>会自动回退单连接下载，不影响使用</td></tr>
+    <tr><td>企业邮箱（Exchange / Dovecot）</td><td>通常支持</td><td>大附件弱网时收益明显</td></tr>
+  </table>
+  <div class="note"><b>提示：</b>本功能无需配置，超过 6MB 的附件自动启用；下载设置里可调分块大小与连接数。</div>
+</section>
+
+</body>
+</html>

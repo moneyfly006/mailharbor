@@ -10,6 +10,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { Icon, type IconName } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
+import { GmailAccel } from '../components/GmailAccel'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { StatusBadge } from '../components/StatusBadge'
 import { Switch } from '../components/Switch'
@@ -772,6 +773,9 @@ export function Accounts(): JSX.Element {
   return (
     <>
       {header}
+
+      {accounts && accounts.length > 0 ? <GmailAccel accounts={accounts} /> : null}
+
       {proxyCard}
 
       <div className="acct-wrap">

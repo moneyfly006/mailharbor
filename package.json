@@ -1,6 +1,6 @@
 {
   "name": "mailharbor",
-  "version": "0.1.28",
+  "version": "0.1.34",
   "description": "MailHarbor · 邮件图稿自动归档（IMAP 收信 / SMTP 回信）",
   "main": "out/main/index.js",
   "author": "MailHarbor",
@@ -24,7 +24,9 @@
     "test:seed": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-seed.ts",
     "test:providers": "node scripts/test-providers.mjs",
     "test:spam": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-spam-scan.ts",
-    "test:autoretry": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-auto-retry.ts"
+    "test:autoretry": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-auto-retry.ts",
+    "test:gmail-auth": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/gmail-api-speed.mjs",
+    "test:gmail-stream": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-gmail-stream.ts"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",
