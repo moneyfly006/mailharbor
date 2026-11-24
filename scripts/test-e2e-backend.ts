@@ -349,17 +349,18 @@ try {
   })))
   await backend.scheduler.checkNow()
   const zipDone = await waitFor(
-    () => readdirSync(prodDir).some((f) => f.startsWith('POD_ORDER_88888')),
+    () => existsSync(join(prodDir, '说明.txt')) || readdirSync(prodDir).some((f) => f.startsWith('POD_ORDER_88888')),
     45_000,
-    'ZIP 落盘'
+    'ZIP 落盘并解压'
   )
-  ok('ZIP 已落盘（保留原压缩包）', zipDone)
+  ok('ZIP 已下载并解压', zipDone)
   const zipExtracted = await waitFor(
     () => existsSync(join(prodDir, '图稿', '手机壳-正面.tif')) && existsSync(join(prodDir, '说明.txt')),
     30_000,
     'ZIP 解压到生产目录'
   )
   ok('ZIP 解压到目标文件夹（不新建子文件夹）', zipExtracted)
+  eq('解压后删除原压缩包', existsSync(join(prodDir, 'POD_ORDER_88888.zip')), false)
   ok('没有为压缩包新建同名子文件夹', !existsSync(join(prodDir, 'POD_ORDER_88888')))
   ok('解压出的中文文件名正确', readFileSync(join(prodDir, '说明.txt'), 'utf8') === 'hello')
 
@@ -393,8 +394,8 @@ try {
   const z3 = new AdmZip(); z3.addFile('超大附件内容.txt', Buffer.from('manual')); z3.writeZip(manualZip)
   const archived = await backend.archiveManualFiles(mrec.id, [manualZip])
   ok('手动归档成功', archived.ok && (archived.archived ?? 0) >= 1)
-  ok('归档后文件出现在目标目录', readdirSync(prodDir).some((f) => f.startsWith('POD_ORDER_77777')))
   ok('手动归档后自动解压', existsSync(join(prodDir, '超大附件内容.txt')))
+  eq('手动归档解压后删除压缩包', existsSync(join(prodDir, 'POD_ORDER_77777.zip')), false)
   const afterManual = repos.listRecords({ page: 1, pageSize: 20 }).rows.find((r) => r.id === mrec.id)!
   eq('归档后状态=done', afterManual.status, 'done')
 
@@ -423,11 +424,12 @@ try {
   })))
   await backend.scheduler.checkNow()
   const fallbackDone = await waitFor(
-    () => existsSync(join(prodDir, 'POD_ORDER_99999_fallback.zip')),
+    () => existsSync(join(prodDir, '兜底.txt')),
     45_000,
-    '白名单未勾 ZIP 仍归档'
+    '白名单未勾 ZIP 仍归档并解压'
   )
-  ok('规则没勾 ZIP，ZIP 仍被归档（不丢件）', fallbackDone)
+  ok('规则没勾 ZIP，ZIP 仍被归档并解压（不丢件）', fallbackDone)
+  eq('兜底解压后删除压缩包', existsSync(join(prodDir, 'POD_ORDER_99999_fallback.zip')), false)
   const fbRec = repos.listRecords({ page: 1, pageSize: 20 }).rows.find((r) => r.subject.includes('类型未勾选测试'))
   eq('状态不是类型不符', fbRec?.status === 'ignored_type', false)
   ok(
