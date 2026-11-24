@@ -48,6 +48,20 @@ export function Sidebar(): JSX.Element {
     }
   }
 
+  const showDiagnostics = (): void => {
+    const parts = [
+      `版本 v${version}`,
+      `页面 ${page}`,
+      `概览数据 ${dashboard ? '已加载' : '未加载'}`,
+      dashboardError ? `概览错误：${dashboardError}` : '',
+      `监听 ${dashboard?.listening ? '中' : '已暂停'}`,
+      `规则 ${rulesCount} 条`,
+      `账户 ${dashboard?.accounts.length ?? 0} 个`,
+      `下次检查 ${dashboard?.checking ? '检查中' : '—'}`
+    ].filter(Boolean)
+    pushToast('success', '诊断信息', parts.join(' · '))
+  }
+
   const updateLabel =
     updateState?.status === 'downloaded'
       ? `重启更新 v${updateState.availableVersion ?? ''}`
@@ -59,7 +73,7 @@ export function Sidebar(): JSX.Element {
             ? '已是最新'
             : '检查更新'
 
-  const { page, navigate, dashboard, rulesCount, demo } = useApp()
+  const { page, navigate, dashboard, dashboardError, rulesCount, demo, pushToast } = useApp()
   const now = useNow()
   const listening = dashboard?.listening ?? false
   const accounts = dashboard?.accounts ?? []
@@ -133,6 +147,9 @@ export function Sidebar(): JSX.Element {
         <span className="mono">v{version}</span>
         <button type="button" className="sb-update" onClick={() => void checkUpdate()}>
           {updateBusy ? '检查中…' : updateLabel}
+        </button>
+        <button type="button" className="sb-update" onClick={showDiagnostics} title="显示概览/规则加载状态，便于排查空白页">
+          诊断
         </button>
       </div>
       <div className="sb-hint">

@@ -69,16 +69,9 @@ function safeEntryPath(name: string): string | null {
   return parts.join('/')
 }
 
+/** 同名文件直接覆盖（需求：解压包内文件与文件夹里已有文件重名时覆盖） */
 function uniquePath(dir: string, rel: string): string {
-  const target = join(dir, rel)
-  if (!existsSync(target)) return target
-  const ext = extname(target)
-  const stem = target.slice(0, target.length - ext.length)
-  for (let i = 2; i < 500; i++) {
-    const candidate = `${stem} (${i})${ext}`
-    if (!existsSync(candidate)) return candidate
-  }
-  return `${stem}-${createHash('sha1').update(String(Date.now())).digest('hex').slice(0, 6)}${ext}`
+  return join(dir, rel)
 }
 
 function writeEntry(targetDir: string, name: string, data: Uint8Array, result: ExtractResult): void {
@@ -251,6 +244,23 @@ async function extractZipDirect(archivePath: string, targetDir: string, result: 
 
 /** 解压压缩包到 targetDir（与压缩包同级）；非压缩包返回 null */
 export async function extractArchiveTo(
+  archivePath: string,
+  targetDir: string,
+  opts: { tempDir?: string } = {}
+): Promise<ExtractResult | null> {
+  const result = await extractArchiveToInner(archivePath, targetDir, opts)
+  // 需求：解压完成后删除压缩包（无论 ZIP/RAR/7Z），只保留解压出来的文件
+  if (result && result.extracted > 0) {
+    try {
+      rmSync(archivePath, { force: true })
+    } catch {
+      /* 删除失败不影响已解压文件 */
+    }
+  }
+  return result
+}
+
+async function extractArchiveToInner(
   archivePath: string,
   targetDir: string,
   opts: { tempDir?: string } = {}

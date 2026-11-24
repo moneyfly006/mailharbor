@@ -758,11 +758,11 @@ export function Rules(): JSX.Element {
     )
   }
 
-  if (loadError && !rules) {
+  if ((loadError || !rules) && !loading) {
     return (
       <>
         {header}
-        <ErrorState message={loadError} onRetry={() => void load()} />
+        <ErrorState message={loadError ?? '规则数据加载失败（主进程可能正忙或数据库未就绪），请重试。'} onRetry={() => void load()} />
       </>
     )
   }
@@ -1025,7 +1025,7 @@ export function Rules(): JSX.Element {
               <div>
                 <b>③</b>
                 <span>
-                  复制到全部目标路径，重名加 <span className="mono">(2)</span>
+                  复制到全部目标路径，同名直接覆盖
                 </span>
               </div>
               <div>

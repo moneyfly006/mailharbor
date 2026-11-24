@@ -306,7 +306,7 @@ export function Dashboard(): JSX.Element {
         {pageHeader}
         {dashboardError ? (
           <ErrorState message={dashboardError} onRetry={refreshDashboard} />
-        ) : (
+        ) : dashboardLoading ? (
           <div className="grid" style={{ gap: 14 }}>
             <div className="skeleton-card" style={{ height: 70 }} />
             <div className="grid cols-3">
@@ -315,8 +315,12 @@ export function Dashboard(): JSX.Element {
               <div className="skeleton-card" style={{ height: 208 }} />
             </div>
             <div className="skeleton-card" style={{ height: 240 }} />
-            {dashboardLoading ? null : <div className="hint">暂无可展示的数据</div>}
           </div>
+        ) : (
+          <ErrorState
+            message="概览数据加载失败（主进程可能正忙或数据库未就绪），请点「重新加载」；如果反复出现，请把软件版本号告诉我。"
+            onRetry={refreshDashboard}
+          />
         )}
       </>
     )

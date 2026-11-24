@@ -92,7 +92,11 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
 
   const loadDashboard = useCallback(async () => {
     try {
-      const data = await api.dashboard()
+      // 主进程忙（大附件下载/解压）偶发 IPC 变慢：超时后明确报错，避免页面一直停在加载骨架
+      const data = await Promise.race([
+        api.dashboard(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('概览数据加载超时（10 秒），请点「重新加载」或稍后再试')), 10_000))
+      ])
       setDashboard(data)
       setDashboardError(null)
     } catch (e) {

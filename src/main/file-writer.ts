@@ -154,7 +154,8 @@ export async function copyIntoDir(
   if (space.free < Math.max(src.size * 1.2, minFreeBytes)) {
     throw Object.assign(new Error('目标磁盘空间不足'), { code: 'NO_SPACE' })
   }
-  const finalName = await uniqueNameInDir(dir, filename)
+  // 需求：同名文件直接覆盖（无论是解压出来的，还是直接下载的 PNG/TIF/压缩包）
+  const finalName = filename
   const finalPath = join(dir, finalName)
   const partPath = join(dir, `.mh-${process.pid}-${Date.now()}.part`)
   try {

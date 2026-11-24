@@ -60,28 +60,75 @@ export function createUpdater(opts: {
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.allowPrerelease = false
 
+  // 弹窗提示（只弹一次，避免 6 小时轮询重复打扰）
+  let promptedAvailable = false
+  let promptedDownloaded = false
+  const promptAvailable = (version: string): void => {
+    if (promptedAvailable) return
+    promptedAvailable = true
+    const w = opts.window()
+    if (!w) return
+    void dialog
+      .showMessageBox(w, {
+        type: 'info',
+        title: '发现新版本',
+        message: `发现新版本 v${version}`,
+        detail: '软件已开始自动下载 GitHub 上的安装包，下载完成后会提示你重启安装。',
+        buttons: ['知道了'],
+        defaultId: 0,
+        noLink: true
+      })
+      .catch(() => {})
+  }
+  const promptRestart = (version: string): void => {
+    if (promptedDownloaded) return
+    promptedDownloaded = true
+    const w = opts.window()
+    if (!w) {
+      // 没有窗口时直接静默安装（下次退出时也会自动安装）
+      return
+    }
+    void dialog
+      .showMessageBox(w, {
+        type: 'info',
+        title: '更新已下载',
+        message: `新版本 v${version} 已下载完成`,
+        detail: '点击「立即重启」会关闭软件并安装新版本；点「稍后」则在你下次退出时自动安装。',
+        buttons: ['立即重启', '稍后'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+      })
+      .then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall(false, true)
+      })
+      .catch(() => {})
+  }
+
   autoUpdater.on('checking-for-update', () => setState({ status: 'checking', message: '正在检查更新…' }))
-  autoUpdater.on('update-available', (info: UpdateInfo) =>
+  autoUpdater.on('update-available', (info: UpdateInfo) => {
     setState({
       status: 'available',
       availableVersion: info.version,
       message: `发现新版本 ${info.version}，正在后台下载…`
     })
-  )
+    promptAvailable(info.version)
+  })
   autoUpdater.on('update-not-available', () =>
     setState({ status: 'up-to-date', availableVersion: null, message: '已是最新版本', checkedAt: Date.now() })
   )
   autoUpdater.on('download-progress', (p) =>
     setState({ status: 'downloading', progressPercent: Math.round(p.percent) })
   )
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) =>
+  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
     setState({
       status: 'downloaded',
       availableVersion: info.version,
       progressPercent: 100,
       message: `新版本 ${info.version} 已下载，重启后生效`
     })
-  )
+    promptRestart(info.version)
+  })
   autoUpdater.on('error', (e: Error) =>
     setState({ status: 'error', message: `检查更新失败：${e.message.slice(0, 160)}` })
   )

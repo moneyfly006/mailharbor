@@ -52,10 +52,9 @@ const res = await extractArchiveTo(zipPath, target)
 eq('解压成功返回结果', !!res, true)
 eq('解压文件数（__MACOSX 被跳过；../ 被库归一化后落在目录内）', res!.extracted, 3)
 eq('不存在 ../evil.txt', existsSync(join(root, 'evil.txt')), false)
-eq('原压缩包保留', existsSync(zipPath), true)
+eq('解压后删除压缩包', existsSync(zipPath), false)
 eq('子目录结构保留', existsSync(join(target, '子目录', 'B.png')), true)
-const aFiles = ['A (2).tif', 'A.tif'].filter((f) => existsSync(join(target, f)))
-eq('重名文件加编号，不覆盖', aFiles.length >= 1 && readFileSync(join(target, 'A.tif'), 'utf8') === 'OLD', true)
+eq('重名文件直接覆盖（最新内容生效）', readFileSync(join(target, 'A.tif'), 'utf8'), 'TIF-CONTENT')
 eq('解压出的内容正确', readFileSync(join(target, '子目录', 'B.png'), 'utf8'), 'PNG-CONTENT')
 
 const evilRes = existsSync(evilZip) ? await extractArchiveTo(evilZip, target2) : null
