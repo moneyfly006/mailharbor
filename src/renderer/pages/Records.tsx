@@ -229,6 +229,42 @@ export function Records(): JSX.Element {
       !r.attachments.some((a) => a.deliveries.some((d) => d.state === 'failed' || d.state === 'retry_wait'))
   )
 
+  const activeCount = downloads.filter((d) => d.state === 'active').length
+  const failedPathCount = rows.reduce(
+    (n, r) => n + aggregateDeliveries(r).filter((d) => d.state === 'failed' || d.state === 'retry_wait').length,
+    0
+  )
+  const doneCount = rows.filter((r) => r.status === 'done').length
+  const [bulkRetryingPaths, setBulkRetryingPaths] = useState(false)
+
+  const retryAllFailedPaths = async (): Promise<void> => {
+    const targets: Array<{ messageId: number; deliveryId: number }> = []
+    for (const r of rows) {
+      for (const d of aggregateDeliveries(r)) {
+        if (d.state !== 'failed' && d.state !== 'retry_wait') continue
+        for (const deliveryId of d.failedDeliveryIds) targets.push({ messageId: r.id, deliveryId })
+      }
+    }
+    if (targets.length === 0) return
+    setBulkRetryingPaths(true)
+    let ok = 0
+    try {
+      for (const tg of targets) {
+        try {
+          await api.records.retry(tg.messageId, tg.deliveryId)
+          ok += 1
+        } catch {
+          /* 单条失败继续 */
+        }
+      }
+      pushToast(ok > 0 ? 'success' : 'warn', `已重试 ${ok} / ${targets.length} 条失败路径`, '重试结果会显示在对应记录的路径状态里')
+      reload()
+      refreshDashboard()
+    } finally {
+      setBulkRetryingPaths(false)
+    }
+  }
+
   const retryAllFailedDownloads = async (): Promise<void> => {
     if (failedDownloadRows.length === 0) return
     setBulkRetrying(true)
@@ -310,137 +346,186 @@ export function Records(): JSX.Element {
     <>
       {header}
 
+      <div className="dl-summary" aria-label="下载中心状态">
+        <span className={cls('dls-badge', activeCount > 0 && 'live')}>
+          <span className={cls('dot', activeCount > 0 ? 'dot-live' : 'dot-idle')} aria-hidden="true" />
+          进行中 <b>{activeCount}</b>
+        </span>
+        <span className={cls('dls-badge', failedPathCount > 0 && 'warn')}>失败路径 <b>{failedPathCount}</b></span>
+        <span className="dls-badge">本页已归档 <b>{doneCount}</b></span>
+        {failedPathCount > 0 ? (
+          <Button size="sm" variant="danger" icon="download" loading={bulkRetryingPaths} onClick={() => void retryAllFailedPaths()}>
+            全部重试路径
+          </Button>
+        ) : null}
+        <span className="dls-summary-note">失败会自动重试；也可手动重试，不会重复写入已成功的文件夹</span>
+      </div>
+
       {dlPanelOpen && dlSettings ? (
         <section className="dl-settings" aria-label="下载设置">
-          <div className="dls-item">
-            <span className="dls-lbl">单个附件超时</span>
-            <select
-              className="dls-select"
-              value={dlSettings.timeoutSec}
-              aria-label="单个附件下载超时"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, timeoutSec: Number(e.target.value) })}
-            >
-              <option value={300}>5 分钟</option>
-              <option value={600}>10 分钟</option>
-              <option value={900}>15 分钟（推荐）</option>
-              <option value={1800}>30 分钟</option>
-              <option value={3600}>60 分钟</option>
-            </select>
+          <div className="dls-title">
+            <div>
+              <h3>下载与网络</h3>
+              <p>大附件、弱网时优先调这里；改完立即生效。</p>
+            </div>
+            <span className="dls-tag">改动会保存到本机</span>
           </div>
-          <div className="dls-item">
-            <span className="dls-lbl">Gmail 加速（API）</span>
-            <select
-              className="dls-select"
-              value={dlSettings.gmail ? 'on' : 'off'}
-              aria-label="是否启用 Gmail API 加速下载"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, gmail: e.target.value === 'on' })}
-            >
-              <option value="on">开启（HTTPS 下载）</option>
-              <option value="off">关闭（走 IMAP）</option>
-            </select>
+
+          <div className="dls-grid">
+            <div className="dls-item">
+              <span className="dls-lbl">单个附件超时</span>
+              <select
+                className="dls-select"
+                value={dlSettings.timeoutSec}
+                aria-label="单个附件下载超时"
+                onChange={(e) => void saveDlSettings({ ...dlSettings, timeoutSec: Number(e.target.value) })}
+              >
+                <option value={300}>5 分钟</option>
+                <option value={600}>10 分钟</option>
+                <option value={900}>15 分钟（推荐）</option>
+                <option value={1800}>30 分钟</option>
+                <option value={3600}>60 分钟</option>
+              </select>
+              <span className="dls-help">超时后自动重试；大文件建议 30–60 分钟</span>
+            </div>
+
+            <div className="dls-item">
+              <span className="dls-lbl">分块大小</span>
+              <select
+                className="dls-select"
+                value={dlSettings.chunkMB}
+                aria-label="IMAP 分块大小"
+                onChange={(e) => void saveDlSettings({ ...dlSettings, chunkMB: Number(e.target.value) })}
+              >
+                <option value={1}>1 MB</option>
+                <option value={2}>2 MB（推荐）</option>
+                <option value={4}>4 MB</option>
+                <option value={8}>8 MB</option>
+                <option value={16}>16 MB</option>
+              </select>
+              <span className="dls-help">IMAP 每次拉取的数据量，2MB 通常最稳</span>
+            </div>
+
+            <div className="dls-item">
+              <span className="dls-lbl">多连接并行</span>
+              <select
+                className="dls-select"
+                value={dlSettings.parallel ? String(dlSettings.conn) : 'off'}
+                aria-label="多连接并行下载"
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === 'off') void saveDlSettings({ ...dlSettings, parallel: false })
+                  else void saveDlSettings({ ...dlSettings, parallel: true, conn: Number(v) })
+                }}
+              >
+                <option value="off">关闭（单连接）</option>
+                <option value={2}>2 连接</option>
+                <option value={4}>4 连接（推荐）</option>
+                <option value={6}>6 连接</option>
+                <option value={8}>8 连接</option>
+              </select>
+              <span className="dls-help">大附件切成多段同时下载，实测约 2 倍</span>
+            </div>
+
+            <div className="dls-item">
+              <span className="dls-lbl">Gmail 加速（API）</span>
+              <select
+                className="dls-select"
+                value={dlSettings.gmail ? 'on' : 'off'}
+                aria-label="是否启用 Gmail API 加速下载"
+                onChange={(e) => void saveDlSettings({ ...dlSettings, gmail: e.target.value === 'on' })}
+              >
+                <option value="on">开启（HTTPS）</option>
+                <option value="off">关闭（走 IMAP）</option>
+              </select>
+              <span className="dls-help">Gmail 附件走 HTTPS，比 IMAP 快 4–5 倍（需先在邮箱账户页授权）</span>
+            </div>
           </div>
-          <div className="dls-item">
-            <span className="dls-lbl">失败自动重试</span>
-            <select
-              className="dls-select"
-              value={dlSettings.attempts}
-              aria-label="附件下载失败自动重试次数"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, attempts: Number(e.target.value) })}
-            >
-              <option value={1}>1 次</option>
-              <option value={2}>2 次</option>
-              <option value={3}>3 次（推荐）</option>
-              <option value={5}>5 次</option>
-            </select>
+
+          <div className="dls-title">
+            <div>
+              <h3>容错与扫描</h3>
+              <p>网络抖动、垃圾邮件、失败补拉都在这一组。</p>
+            </div>
           </div>
-          <div className="dls-item">
-            <span className="dls-lbl">Gmail 加速（API）</span>
-            <select
-              className="dls-select"
-              value={dlSettings.gmail ? 'on' : 'off'}
-              aria-label="是否启用 Gmail API 加速下载"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, gmail: e.target.value === 'on' })}
-            >
-              <option value="on">开启（HTTPS 下载）</option>
-              <option value="off">关闭（走 IMAP）</option>
-            </select>
+
+          <div className="dls-grid">
+            <div className="dls-item">
+              <span className="dls-lbl">失败自动重试</span>
+              <select
+                className="dls-select"
+                value={dlSettings.autoRetry ? 'on' : 'off'}
+                aria-label="失败是否自动重试"
+                onChange={(e) => void saveDlSettings({ ...dlSettings, autoRetry: e.target.value === 'on' })}
+              >
+                <option value="on">自动重试（推荐）</option>
+                <option value="off">只手动重试</option>
+              </select>
+              <span className="dls-help">按 1 分→5 分→15 分→30 分→1 小时退避，最多 6 次</span>
+            </div>
+
+            <div className="dls-item">
+              <span className="dls-lbl">每次重试次数</span>
+              <select
+                className="dls-select"
+                value={dlSettings.attempts}
+                aria-label="附件下载失败自动重试次数"
+                onChange={(e) => void saveDlSettings({ ...dlSettings, attempts: Number(e.target.value) })}
+              >
+                <option value={1}>1 次</option>
+                <option value={2}>2 次</option>
+                <option value={3}>3 次（推荐）</option>
+                <option value={5}>5 次</option>
+              </select>
+              <span className="dls-help">单次下载内部的即时重试次数</span>
+            </div>
+
+            <div className="dls-item">
+              <span className="dls-lbl">垃圾邮件文件夹</span>
+              <select
+                className="dls-select"
+                value={dlSettings.spam ? 'on' : 'off'}
+                aria-label="是否同时扫描垃圾邮件文件夹"
+                onChange={(e) => void saveDlSettings({ ...dlSettings, spam: e.target.value === 'on' })}
+              >
+                <option value="on">同时扫描（推荐）</option>
+                <option value="off">只扫收件箱</option>
+              </select>
+              <span className="dls-help">Gmail 常把 QQ 大附件判垃圾；照样归档，但不自动回信</span>
+            </div>
           </div>
-          <div className="dls-item">
-            <span className="dls-lbl">失败自动重试</span>
-            <select
-              className="dls-select"
-              value={dlSettings.autoRetry ? 'on' : 'off'}
-              aria-label="失败是否自动重试"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, autoRetry: e.target.value === 'on' })}
-            >
-              <option value="on">自动重试（推荐）</option>
-              <option value="off">只手动重试</option>
-            </select>
+
+          <div className="dls-title">
+            <div>
+              <h3>归档</h3>
+              <p>文件落到目标文件夹之后怎么处理。</p>
+            </div>
           </div>
-          <div className="dls-item">
-            <span className="dls-lbl">垃圾邮件文件夹</span>
-            <select
-              className="dls-select"
-              value={dlSettings.spam ? 'on' : 'off'}
-              aria-label="是否同时扫描垃圾邮件文件夹"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, spam: e.target.value === 'on' })}
-            >
-              <option value="on">同时扫描（推荐）</option>
-              <option value="off">只扫收件箱</option>
-            </select>
+
+          <div className="dls-grid">
+            <div className="dls-item">
+              <span className="dls-lbl">自动解压 ZIP/RAR</span>
+              <select
+                className="dls-select"
+                value={dlSettings.extract ? 'on' : 'off'}
+                aria-label="压缩包自动解压"
+                onChange={(e) => void saveDlSettings({ ...dlSettings, extract: e.target.value === 'on' })}
+              >
+                <option value="on">解压到目标文件夹</option>
+                <option value="off">只存压缩包，不解压</option>
+              </select>
+              <span className="dls-help">解压不建子文件夹，保留原压缩包；大包在后台排队不阻塞收信</span>
+            </div>
           </div>
-          <div className="dls-item">
-            <span className="dls-lbl">多连接并行</span>
-            <select
-              className="dls-select"
-              value={dlSettings.parallel ? String(dlSettings.conn) : 'off'}
-              aria-label="多连接并行下载"
-              onChange={(e) => {
-                const v = e.target.value
-                if (v === 'off') void saveDlSettings({ ...dlSettings, parallel: false })
-                else void saveDlSettings({ ...dlSettings, parallel: true, conn: Number(v) })
-              }}
-            >
-              <option value="off">关闭（单连接）</option>
-              <option value={2}>2 连接</option>
-              <option value={4}>4 连接（推荐）</option>
-              <option value={6}>6 连接</option>
-              <option value={8}>8 连接</option>
-            </select>
-          </div>
-          <div className="dls-item">
-            <span className="dls-lbl">分块大小</span>
-            <select
-              className="dls-select"
-              value={dlSettings.chunkMB}
-              aria-label="IMAP 分块大小"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, chunkMB: Number(e.target.value) })}
-            >
-              <option value={1}>1 MB</option>
-              <option value={2}>2 MB（推荐）</option>
-              <option value={4}>4 MB</option>
-              <option value={8}>8 MB</option>
-              <option value={16}>16 MB</option>
-            </select>
-          </div>
-          <div className="dls-item">
-            <span className="dls-lbl">自动解压 ZIP/RAR</span>
-            <select
-              className="dls-select"
-              value={dlSettings.extract ? 'on' : 'off'}
-              aria-label="压缩包自动解压"
-              onChange={(e) => void saveDlSettings({ ...dlSettings, extract: e.target.value === 'on' })}
-            >
-              <option value="on">解压到目标文件夹</option>
-              <option value="off">只存压缩包，不解压</option>
-            </select>
-          </div>
+
           <div className="dls-hint">
             <Icon name="alert" size={12} />
             <span>网络慢时把超时调到 30–60 分钟；失败后也可在下方记录里点「重试下载」手动再拉一次。</span>
           </div>
         </section>
       ) : null}
+
+
 
       {downloads.length > 0 ? (
         <section className="dl-progress" aria-label="附件下载进度">
