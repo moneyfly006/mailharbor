@@ -7,8 +7,8 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 最新版本 | v0.1.26（自动更新已启用） |
-| 安装包 | [MailHarbor-Setup-0.1.26.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
+| 最新版本 | v0.1.27（自动更新已启用） |
+| 安装包 | [MailHarbor-Setup-0.1.27.exe](https://github.com/moneyfly006/mailharbor/releases/latest)（Windows 10/11 x64，116MB） |
 | macOS | [dmg / zip](https://github.com/moneyfly006/mailharbor/releases/latest)（arm64 + x64） |
 | 设计说明书 | [docs/邮箱资料助手-设计说明书.pdf](docs/邮箱资料助手-设计说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-Design-Spec.pdf)（6 屏高保真设计图） |
 | **配置说明书** | [docs/邮箱资料助手-配置说明书.pdf](docs/邮箱资料助手-配置说明书.pdf) · [发布页下载](https://github.com/moneyfly006/mailharbor/releases/latest/download/MailHarbor-User-Manual.pdf)（安装→配邮箱→配规则→配回信→日常使用，21 页） |
@@ -17,6 +17,12 @@
 **安装路径可以自己选**：安装包是多步向导（不是一键静默装），会出现「选择安装位置」这一步，默认装在
 `%LOCALAPPDATA%\Programs\邮箱资料助手`（按当前用户安装，**不需要管理员权限**），你可以改成 `D:\软件\邮箱资料助手` 等任意目录。
 装完桌面会生成「**邮箱资料助手**」快捷方式（朱红信封图标），开始菜单同名入口；卸载时会保留邮件记录与配置。
+
+## 自动重试 / 检查倒计时（v0.1.27）
+
+- **失败自动重试**：失败邮件/失败路径按 1m→5m→15m→30m→1h 退避自动重试（最多 6 次）；下载中的邮件不重复触发；成功清零；可在「下载设置」关闭。
+- **概览与记录口径统一**：「失败待重试」数量 = 「下载记录 → 待重试」数量，并直接列出失败路径。
+- **左下角倒计时修复**：不再一直显示「即将检查」；检查中显示「检查中…」+ 扫描动画，空闲时显示「N 秒后」+ 进度条。
 
 ## 下载加速 / 垃圾邮件扫描（v0.1.23）
 

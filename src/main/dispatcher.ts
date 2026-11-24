@@ -313,6 +313,7 @@ export class Dispatcher {
       if (record) this.deps.emit({ type: 'message:upserted', record })
       this.log.info(`邮件 #${messageId} 状态 ${before.status} → ${next}`)
     }
+    if (next === 'done') repos.clearMessageAutoRetry(messageId)
     if (agg.allTerminal && before.status !== next) {
       try {
         void this.onSettled?.(messageId)

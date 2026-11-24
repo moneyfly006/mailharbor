@@ -1,6 +1,6 @@
 {
   "name": "mailharbor",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "MailHarbor · 邮件图稿自动归档（IMAP 收信 / SMTP 回信）",
   "main": "out/main/index.js",
   "author": "MailHarbor",
@@ -23,7 +23,8 @@
     "test:packaged": "node scripts/packaged-e2e.mjs",
     "test:seed": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-seed.ts",
     "test:providers": "node scripts/test-providers.mjs",
-    "test:spam": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-spam-scan.ts"
+    "test:spam": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-spam-scan.ts",
+    "test:autoretry": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs --no-warnings scripts/test-auto-retry.ts"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",

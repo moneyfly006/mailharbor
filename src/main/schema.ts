@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS messages (
   match_source TEXT,
   status TEXT NOT NULL DEFAULT 'queued',
   mailbox TEXT NOT NULL DEFAULT 'INBOX',
+  auto_retry_count INTEGER NOT NULL DEFAULT 0, next_retry_at INTEGER,
   reply_status TEXT NOT NULL DEFAULT 'pending',
   links TEXT,
   error TEXT,

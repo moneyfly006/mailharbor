@@ -441,11 +441,14 @@ export function buildDashboard(): DashboardData {
     todayFiles: dashboard.todayFiles,
     todayFailed: dashboard.todayFailed,
     pendingRetry: dashboard.pendingRetry,
+    retryItems: repos.listRetryDeliveries(8),
     disks: repos.listDisks(),
     rulePaths: repos.rulePathSummary(),
     recent,
     pollIntervalSec: getSetting<number>('pollIntervalSec') ?? 30,
     nextCheckAt: b?.scheduler.nextCheckAt() ?? null,
+    checking: b?.scheduler.isChecking() ?? false,
+    lastCheckAt: b?.scheduler.lastCheckAt() ?? null,
     uptimeMs: startedAt ? Date.now() - startedAt : 0
   }
 }

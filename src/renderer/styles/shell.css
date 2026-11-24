@@ -1760,3 +1760,15 @@ textarea.input:focus-within {
 .sb-update:hover {
   text-decoration: underline;
 }
+
+/* 「检查中」进度条：不确定进度动画 */
+.run-meter.is-scanning i {
+  animation: run-meter-scan 1.4s linear infinite;
+  background: linear-gradient(90deg, var(--color-accent, #C8422D) 0%, rgba(200, 66, 45, 0.35) 50%, var(--color-accent, #C8422D) 100%);
+  background-size: 50% 100%;
+}
+
+@keyframes run-meter-scan {
+  from { background-position: -50% 0; }
+  to { background-position: 150% 0; }
+}

@@ -328,7 +328,7 @@ export function Dashboard(): JSX.Element {
   const next = secondsUntil(d.nextCheckAt, now)
   const failedAccounts = d.accounts.filter((a) => a.status === 'auth_failed' || a.status === 'conn_failed')
   const unavailableDisks = d.disks.filter((x) => x.health === 'unavailable').length
-  const retryItems = d.recent.flatMap((row) => failedDeliveryItems(row)).slice(0, 3)
+  const retryItems: FailedDeliveryItem[] = d.retryItems.slice(0, 4)
   const listening = d.listening
 
   return (

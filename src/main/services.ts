@@ -17,7 +17,13 @@ export interface Backend {
     checkNow(): Promise<void>
     /** 补扫指定 UID（新增/启用规则后重跑历史邮件，不动游标） */
     reprocess(accountId: number, uids: number[]): Promise<{ processed: number; errors: number }>
+    /** 立即执行一轮失败自动重试（测试/调试用），返回触发数量 */
+    runAutoRetryOnce(): Promise<number>
     nextCheckAt(): number | null
+    /** 是否正在执行一轮检查 */
+    isChecking(): boolean
+    /** 最近一次检查完成时间 */
+    lastCheckAt(): number | null
   }
   /** 测试「还没保存」的表单（新建账户向导用） */
   testAccount(input: AccountInput): Promise<TestResult>

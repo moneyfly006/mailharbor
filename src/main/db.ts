@@ -53,6 +53,12 @@ function migrate(database: ReturnType<typeof openSqlite>): void {
     if (!cols('accounts').includes('spam_uid_validity')) {
       database.exec('ALTER TABLE accounts ADD COLUMN spam_uid_validity TEXT')
     }
+    if (!cols('messages').includes('auto_retry_count')) {
+      database.exec('ALTER TABLE messages ADD COLUMN auto_retry_count INTEGER NOT NULL DEFAULT 0')
+    }
+    if (!cols('messages').includes('next_retry_at')) {
+      database.exec('ALTER TABLE messages ADD COLUMN next_retry_at INTEGER')
+    }
   } catch {
     /* 迁移失败不阻塞启动（旧库仍可用，只是没有该开关） */
   }
@@ -119,6 +125,7 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   downloadTimeoutSec: 900,
   downloadChunkSizeMB: 2,
   scanSpam: true,
+  autoRetryFailed: true,
   parallelDownload: true,
   parallelConnections: 4,
   parallelThresholdMB: 6,

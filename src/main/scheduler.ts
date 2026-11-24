@@ -181,10 +181,26 @@ export class Scheduler {
     const interval = this.pollIntervalMs()
     let min: number | null = null
     for (const worker of this.workers.values()) {
-      const at = worker.busy ? this.now() : Math.max(worker.lastPollAt + interval, worker.nextAttemptAt || 0)
+      // 注意：这里不能因为 busy 就返回 now，否则大附件下载期间会一直显示「即将检查」、进度条卡在 100%
+      const at = Math.max(worker.lastPollAt + interval, worker.nextAttemptAt || 0)
       if (min === null || at < min) min = at
     }
     return min
+  }
+
+  /** 是否正在执行一轮检查（任一账户 busy） */
+  isChecking(): boolean {
+    for (const worker of this.workers.values()) if (worker.busy) return true
+    return false
+  }
+
+  /** 最近一次检查完成时间（各账户取最大） */
+  lastCheckAt(): number | null {
+    let max: number | null = null
+    for (const worker of this.workers.values()) {
+      if (worker.lastPollAt > 0 && (max === null || worker.lastPollAt > max)) max = worker.lastPollAt
+    }
+    return max
   }
 
   /**
@@ -549,6 +565,8 @@ export class Scheduler {
       await this.disposeWorker(worker)
     } finally {
       worker.busy = false
+      // 检查结束后刷新一次概览：左下角「检查中/下次检查」和进度条依赖这个字段
+      this.deps.emit({ type: 'dashboard:changed' })
     }
   }
 

@@ -208,6 +208,7 @@ export class MailPipeline {
           }
         }
       }
+      repos.clearMessageAutoRetry(messageId)
       repos.updateMessageStatus(
         messageId,
         'manual_needed',
@@ -284,6 +285,7 @@ export class MailPipeline {
         matchedKeyword: hitRules[0]!.rule.keyword,
         matchSource: hitRules[0]!.hit.source
       })
+      repos.clearMessageAutoRetry(messageId)
       repos.updateMessageStatus(messageId, 'ignored_type')
       repos.updateMessageReplyStatus(messageId, 'disabled', '附件类型不在白名单，不自动回信')
       this.log.info(`命中规则但附件类型不符：${msg.subject}（附件 ${msg.parts.length} 个）→ ignored_type`)

@@ -163,6 +163,8 @@ export interface MessageRow {
   error: string | null
   links: string | null
   mailbox: string | null
+  auto_retry_count: number
+  next_retry_at: number | null
   created_at: number
   updated_at: number
 }
@@ -633,6 +635,44 @@ export function rulePathSummary(): Array<{ ruleId: number; keyword: string; enab
 
 /** 未命中关键词/类型不符的邮件 UID（补扫重跑用） */
 /** 手动重试「下载失败」的邮件：把状态恢复到 queued，附件重置为 pending，便于重新拉取 */
+/** 自动重试队列：状态为 partial/failed、已到重试时间、且当前没有正在下载的附件 */
+export function listAutoRetryMessages(nowTs: number, limit = 10): Array<{ id: number; account_id: number; imap_uid: number }> {
+  return db()
+    .prepare(
+      `SELECT m.id, m.account_id, m.imap_uid FROM messages m
+       WHERE m.status IN ('partial','failed')
+         AND (m.next_retry_at IS NULL OR m.next_retry_at <= ?)
+         AND m.auto_retry_count < 6
+         AND NOT EXISTS (
+           SELECT 1 FROM attachments a
+           WHERE a.message_id=m.id AND a.status='pending' AND a.updated_at > ?
+         )
+       ORDER BY COALESCE(m.next_retry_at,0) ASC LIMIT ?`
+    )
+    .all(nowTs, nowTs - 120_000, limit) as Array<{ id: number; account_id: number; imap_uid: number }>
+}
+
+/** 把失败/等待重试的路径重置为待重试（自动重试用） */
+export function resetDeliveriesForAutoRetry(messageId: number): number {
+  const info = db()
+    .prepare(
+      `UPDATE deliveries SET state='pending', attempts=0, next_retry_at=NULL, error_code=NULL, error=NULL, updated_at=?
+       WHERE message_id=? AND state IN ('failed','retry_wait')`
+    )
+    .run(now(), messageId)
+  return info.changes
+}
+
+export function bumpMessageAutoRetry(id: number, nextRetryAt: number | null): number {
+  db().prepare('UPDATE messages SET auto_retry_count=auto_retry_count+1, next_retry_at=?, updated_at=? WHERE id=?').run(nextRetryAt, now(), id)
+  const row = db().prepare('SELECT auto_retry_count FROM messages WHERE id=?').get(id) as { auto_retry_count: number } | undefined
+  return row?.auto_retry_count ?? 0
+}
+
+export function clearMessageAutoRetry(id: number): void {
+  db().prepare('UPDATE messages SET auto_retry_count=0, next_retry_at=NULL WHERE id=?').run(id)
+}
+
 /** 找出长时间停在 queued 且附件仍未下载的邮件（软件被关闭/网络中断留下的"处理中"） */
 export function listStuckQueuedMessages(olderThanMs: number): Array<{ id: number; subject: string | null }> {
   const cutoff = now() - olderThanMs
@@ -1612,6 +1652,51 @@ export interface DashboardStats {
   pendingRetry: number
 }
 
+/** 概览「失败待重试」列表：直接查所有失败/等待重试的路径（不再只看最近 8 条记录） */
+export function listRetryDeliveries(limit = 8): Array<{
+  messageId: number
+  deliveryId: number
+  filename: string
+  size: number | null
+  targetPath: string
+  drive: string
+  required: boolean
+  state: 'retry_wait' | 'failed'
+  error: string | null
+  attempts: number
+  nextRetryAt: number | null
+}> {
+  const rows = db()
+    .prepare(
+      `SELECT d.id AS deliveryId, d.message_id AS messageId, d.target_path AS targetPath,
+              d.required AS required, d.state AS state, d.error AS error, d.attempts AS attempts,
+              d.next_retry_at AS nextRetryAt, a.filename AS filename, a.size AS size
+       FROM deliveries d
+       JOIN messages m ON m.id=d.message_id
+       JOIN attachments a ON a.id=d.attachment_id
+       WHERE d.state IN ('failed','retry_wait')
+       ORDER BY d.updated_at DESC LIMIT ?`
+    )
+    .all(limit) as any[]
+  return rows.map((r) => ({
+    messageId: Number(r.messageId),
+    deliveryId: Number(r.deliveryId),
+    filename: String(r.filename ?? ''),
+    size: r.size ?? null,
+    targetPath: String(r.targetPath ?? ''),
+    // 与 UI 一致：取盘符（D/E/F）
+    drive: (() => {
+      const m = /^([A-Za-z]:)/.exec(String(r.targetPath ?? ''))
+      return m ? m[1]!.replace(':', '').toUpperCase() : ''
+    })(),
+    required: !!r.required,
+    state: r.state === 'failed' ? 'failed' : 'retry_wait',
+    error: r.error ?? null,
+    attempts: Number(r.attempts ?? 0),
+    nextRetryAt: r.nextRetryAt ?? null
+  }))
+}
+
 export function dashboardStats(): DashboardStats {
   const d = db()
   const today = startOfToday()
@@ -1624,7 +1709,8 @@ export function dashboardStats(): DashboardStats {
       today
     ),
     todayFailed: one("SELECT COUNT(*) AS c FROM messages WHERE received_at>=? AND status='failed'", today),
-    pendingRetry: one("SELECT COUNT(*) AS c FROM deliveries WHERE state IN ('pending','retry_wait','copying')")
+    // 与「下载记录 → 待重试」同口径：messages.status IN ('partial','failed')
+    pendingRetry: one("SELECT COUNT(*) AS c FROM messages WHERE status IN ('partial','failed')")
   }
 }
 

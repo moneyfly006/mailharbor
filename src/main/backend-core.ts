@@ -175,6 +175,73 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     createProvider: deps.createProvider
   })
 
+  // ---------------------------------------------------------------------------
+  // 失败自动重试：每 30 秒扫一次 partial/failed 邮件，按退避时间自动重新下载；
+  // 正在下载（有 pending 附件）的邮件跳过，避免重复触发。
+  // ---------------------------------------------------------------------------
+  const autoRetryDelays = (): number[] => {
+    const base = Math.max(1000, Number(deps.getSetting<number>('autoRetryBaseMs') ?? 60_000))
+    return [base, base * 5, base * 15, base * 30, base * 60, base * 60]
+  }
+  let autoRetryTimer: NodeJS.Timeout | null = null
+  const autoRetrying = new Set<number>()
+
+  async function runAutoRetryOnce(): Promise<number> {
+    let count = 0
+    {
+      if (disposed) return count
+      if (deps.getSetting<boolean>('autoRetryFailed') === false) return count
+      if (!scheduler.isListening()) return count
+      let rows: Array<{ id: number; account_id: number; imap_uid: number }> = []
+      try {
+        rows = repos.listAutoRetryMessages(Date.now(), 8)
+      } catch {
+        return count
+      }
+      for (const row of rows) {
+        if (autoRetrying.has(row.id)) continue
+        autoRetrying.add(row.id)
+        try {
+          const before = repos.getMessage(row.id)
+          if (!before) continue
+          // 双保险：正在下载的不要再触发
+          const downloading = repos
+            .listAttachmentsByMessage(row.id)
+            .some((a) => a.status === 'pending' && Date.now() - a.updated_at < 120_000)
+          if (downloading) continue
+          repos.resetDeliveriesForAutoRetry(row.id)
+          const target = repos.resetMessageForDownloadRetry(row.id)
+          if (!target) continue
+          const delays = autoRetryDelays()
+          const attempt = repos.bumpMessageAutoRetry(
+            row.id,
+            Date.now() + delays[Math.min(before.auto_retry_count, delays.length - 1)]!
+          )
+          count++
+          emit({ type: 'message:upserted', record: repos.getRecordById(row.id)! })
+          emit({ type: 'dashboard:changed' })
+          const r = await scheduler.reprocess(row.account_id, [row.imap_uid])
+          dispatcher.schedule()
+          console.log(
+            `[auto-retry] 邮件 #${row.id}（${before.subject?.slice(0, 24) ?? ''}）第 ${attempt} 次自动重试，processed=${r.processed}`
+          )
+        } catch (e) {
+          console.warn('[auto-retry] 异常', e instanceof Error ? e.message : String(e))
+        } finally {
+          autoRetrying.delete(row.id)
+        }
+      }
+    }
+    return count
+  }
+
+  function startAutoRetry(): void {
+    if (autoRetryTimer) return
+    autoRetryTimer = setInterval(() => void runAutoRetryOnce().catch(() => {}), 30_000)
+    autoRetryTimer.unref?.()
+    void runAutoRetryOnce().catch(() => {})
+  }
+
   let disposed = false
   const backend: Backend = {
     bus: deps.bus,
@@ -191,7 +258,10 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         await scheduler.checkNow()
       },
       reprocess: (accountId: number, uids: number[]) => scheduler.reprocess(accountId, uids),
-      nextCheckAt: () => scheduler.nextCheckAt()
+      runAutoRetryOnce,
+      nextCheckAt: () => scheduler.nextCheckAt(),
+      isChecking: () => scheduler.isChecking(),
+      lastCheckAt: () => scheduler.lastCheckAt()
     },
     async testAccount(input: AccountInput): Promise<TestResult> {
       if (!input?.password) return failedTest('请填写应用专用密码 / 授权码后再测试连接', 'imap', input)
@@ -405,6 +475,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     },
     async init(): Promise<void> {
       dispatcher.start()
+      startAutoRetry()
       // 上次运行被强行关闭/断网时，邮件会停在「处理中」：启动后标记为失败，让用户能点「重试下载」
       try {
         const stuck = repos.listStuckQueuedMessages(5 * 60_000)
@@ -424,6 +495,10 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     async dispose(): Promise<void> {
       if (disposed) return
       disposed = true
+      if (autoRetryTimer) {
+        clearInterval(autoRetryTimer)
+        autoRetryTimer = null
+      }
       scheduler.stopAll()
       dispatcher.stop()
       replyService.dispose()

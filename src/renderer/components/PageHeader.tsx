@@ -17,6 +17,7 @@ export function PageHeader({ eyebrow, eyebrowCn, title, sub, actions }: PageHead
   const now = useNow()
   const listening = dashboard?.listening ?? false
   const next = secondsUntil(dashboard?.nextCheckAt, now)
+  const checking = dashboard?.checking ?? false
 
   return (
     <header className="page-head">
@@ -31,8 +32,8 @@ export function PageHeader({ eyebrow, eyebrowCn, title, sub, actions }: PageHead
         <span className={cls('listen-pill', listening && 'is-live')}>
           <span className={cls('dot', listening ? 'dot-live' : 'dot-idle')} aria-hidden="true" />
           {listening ? '监听中' : '已暂停'}
-          {listening && next != null ? (
-            <span className="kv">{next <= 0 ? '· 即将检查' : `· 下次检查 ${fmtCountdown(next)}`}</span>
+          {listening ? (
+            <span className="kv">{checking ? '· 检查中…' : next != null ? `· 下次检查 ${fmtCountdown(next)}` : ''}</span>
           ) : null}
         </span>
         <span className="ph-time">{fmtDateTime(now)}</span>

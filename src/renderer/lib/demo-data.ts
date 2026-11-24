@@ -754,6 +754,7 @@ export const DEMO_SETTINGS: Settings = {
   downloadTimeoutSec: 900,
   downloadChunkSizeMB: 2,
   scanSpam: true,
+  autoRetryFailed: true,
   parallelDownload: true,
   parallelConnections: 4,
   parallelThresholdMB: 6,
@@ -829,10 +830,36 @@ export function buildDemoDashboard(
     todayFiles: files,
     todayFailed: failed,
     pendingRetry,
+    retryItems: records
+      .flatMap((r) =>
+        r.attachments.flatMap((a) =>
+          a.deliveries
+            .filter((d) => d.state === 'failed' || d.state === 'retry_wait')
+            .map((d) => ({
+              messageId: r.id,
+              deliveryId: d.id,
+              filename: a.filename,
+              size: a.size,
+              targetPath: d.targetPath,
+              drive: (() => {
+                const m = /^([A-Za-z]:)/.exec(d.targetPath)
+                return m ? m[1]!.replace(':', '').toUpperCase() : ''
+              })(),
+              required: d.required,
+              state: d.state as 'failed' | 'retry_wait',
+              error: d.error,
+              attempts: d.attempts,
+              nextRetryAt: d.nextRetryAt
+            }))
+        )
+      )
+      .slice(0, 8),
     disks,
     recent: records.slice(0, 6),
     pollIntervalSec: DEMO_SETTINGS.pollIntervalSec,
     nextCheckAt,
+  checking: false,
+  lastCheckAt: Date.now(),
     uptimeMs: 6 * DAY + 3 * HOUR
   }
 }

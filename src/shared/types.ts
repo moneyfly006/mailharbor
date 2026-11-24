@@ -241,10 +241,28 @@ export interface DashboardData {
   todayFiles: number
   todayFailed: number
   pendingRetry: number
+  /** 失败待重试的路径（与「下载记录 → 待重试」同口径，最多 8 条） */
+  retryItems: Array<{
+    messageId: number
+    deliveryId: number
+    filename: string
+    size: number | null
+    targetPath: string
+    drive: string
+    required: boolean
+    state: 'retry_wait' | 'failed'
+    error: string | null
+    attempts: number
+    nextRetryAt: number | null
+  }>
   disks: DiskInfo[]
   recent: RecordRow[]
   pollIntervalSec: number
   nextCheckAt: number | null
+  /** 是否正在执行一轮检查（用于「检查中」提示） */
+  checking: boolean
+  /** 最近一次检查完成时间 */
+  lastCheckAt: number | null
   uptimeMs: number
 }
 
@@ -332,6 +350,8 @@ export interface Settings {
   downloadChunkSizeMB: number
   /** 同时扫描垃圾邮件文件夹（Gmail 常把 QQ 发来的大附件邮件判为垃圾） */
   scanSpam: boolean
+  /** 失败自动重试（失败邮件按退避时间自动重新下载，最多 6 次） */
+  autoRetryFailed: boolean
   /** 多连接并行下载（把整封邮件切段，在 N 条连接上同时取，再本地解析附件） */
   parallelDownload: boolean
   /** 并行连接数（2-8，默认 4） */

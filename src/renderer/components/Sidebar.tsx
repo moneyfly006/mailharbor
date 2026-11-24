@@ -66,7 +66,12 @@ export function Sidebar(): JSX.Element {
   const failedAccounts = accounts.filter((a) => a.status === 'auth_failed' || a.status === 'conn_failed').length
   const next = secondsUntil(dashboard?.nextCheckAt, now)
   const poll = dashboard?.pollIntervalSec ?? 30
-  const elapsed = next == null ? 0 : Math.max(0, Math.min(100, Math.round(((poll - next) / poll) * 100)))
+  const checking = dashboard?.checking ?? false
+  const lastCheck = dashboard?.lastCheckAt ?? null
+  const elapsed =
+    checking || lastCheck == null
+      ? 0
+      : Math.max(0, Math.min(100, Math.round(((now - lastCheck) / (poll * 1000)) * 100)))
 
   return (
     <aside className="sidebar" aria-label="主导航">
@@ -117,11 +122,11 @@ export function Sidebar(): JSX.Element {
           </div>
           <div className="row">
             <span>下次检查</span>
-            <b>{listening ? fmtCountdown(next) : '暂停中'}</b>
+            <b>{!listening ? '暂停中' : checking ? '检查中…' : fmtCountdown(next)}</b>
           </div>
         </div>
-        <div className="run-meter" aria-hidden="true">
-          <i style={{ width: `${elapsed}%` }} />
+        <div className={cls('run-meter', (checking || !listening) && 'is-scanning')} aria-hidden="true">
+          <i style={{ width: checking || !listening ? '100%' : `${elapsed}%` }} />
         </div>
       </div>
       <div className="sb-version">
