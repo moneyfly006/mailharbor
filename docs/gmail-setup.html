@@ -71,6 +71,25 @@
   .mk-hl{outline:1.6px solid var(--red);outline-offset:1px;border-radius:1mm}
   .mk-tag{display:inline-block;background:var(--red);color:#fff;font-family:var(--mono);font-size:7pt;border-radius:50%;width:3.6mm;height:3.6mm;text-align:center;line-height:3.6mm;margin-right:1mm}
   .mk-hint{font-size:8.2pt;color:var(--ink3)}
+
+  /* 可直接复制的网址 */
+  .url{
+    display:block;
+    font-family:var(--mono);
+    font-size:8.6pt;
+    line-height:1.6;
+    color:var(--red2);
+    background:#FFFBF8;
+    border:1px dashed rgba(200,66,45,.35);
+    border-radius:1.2mm;
+    padding:1.6mm 2.2mm;
+    margin:1.6mm 0 2.6mm;
+    word-break:break-all;
+    break-inside:avoid;
+  }
+  .url b{font-family:var(--sans);font-size:9pt;color:var(--ink2);display:block;margin-bottom:.6mm}
+  .url .u{color:var(--red2)}
+  .copy-tip{font-size:8.6pt;color:var(--ink3);margin:-1.2mm 0 3mm}
 </style>
 </head>
 <body>
@@ -104,7 +123,7 @@
     <li><b>7. 验证与排错</b><span>测试按钮 · 常见错误对照表</span></li>
     <li><b>8. 令牌续期与「发布应用」</b><span>7 天限制 · 发布审核真相 · 三种方案</span></li>
     <li><b>9. 安全与撤销</b><span>密钥保管 · 撤销授权</span></li>
-    <li><b>10. 附录</b><span>命令行测速 · IMAP 断点续传说明</span></li>
+    <li><b>10. 附录</b><span>地址清单 · 命令行测速 · IMAP 断点续传说明</span></li>
   </ul>
 
   <h3>先看结论（不想读全文的话）</h3>
@@ -161,6 +180,8 @@
   <h2>3. 创建 Google Cloud 项目并启用 Gmail API</h2>
 
   <h3>3.1 创建项目</h3>
+  <div class="url"><b>打开这个地址（新建项目）</b><span class="u">https://console.cloud.google.com/projectcreate</span></div>
+  <p class="copy-tip">如果地址打不开，先打开 console.cloud.google.com，点顶部项目选择器 →「新建项目」。</p>
   <ol class="steps">
     <li><b>打开控制台</b>浏览器访问 <code>console.cloud.google.com</code>，用要收件的 Gmail 账号登录。</li>
     <li><b>新建项目</b>顶部项目选择器 →「新建项目」→ 名称填 <code>MailHarbor</code> →「创建」。</li>
@@ -168,6 +189,7 @@
   </ol>
 
   <h3>3.2 启用 Gmail API</h3>
+  <div class="url"><b>打开这个地址（Gmail API 详情页，点「启用」）</b><span class="u">https://console.cloud.google.com/apis/library/gmail.googleapis.com</span></div>
   <ol class="steps">
     <li><b>进入 API 库</b>左侧「API 和服务」→「库」。</li>
     <li><b>搜索并启用</b>搜索 <code>Gmail API</code> → 点进详情 → 点「<b>启用</b>」。</li>
@@ -197,7 +219,11 @@
     <b>品牌信息、受众群体（测试用户）、数据访问（范围）、客户端</b>。
   </p>
 
+  <div class="url"><b>打开这个地址（Google Auth Platform 概览）</b><span class="u">https://console.cloud.google.com/auth/overview</span></div>
+  <p class="copy-tip">新版控制台叫「Google Auth Platform」；如果打开的是旧版，用 https://console.cloud.google.com/apis/credentials/consent 也能进。</p>
+
   <h3>4.1 品牌信息（应用信息）</h3>
+  <div class="url"><b>打开这个地址（品牌 / 应用信息）</b><span class="u">https://console.cloud.google.com/auth/branding</span></div>
   <ol class="steps">
     <li><b>应用名称</b>填 <code>MailHarbor</code>（或任意）。</li>
     <li><b>用户支持邮箱</b>选你的 Gmail 地址。</li>
@@ -205,6 +231,7 @@
   </ol>
 
   <h3>4.2 受众群体：保持「外部」+ 添加测试用户</h3>
+  <div class="url"><b>打开这个地址（目标对象 / 受众群体 + 测试用户）</b><span class="u">https://console.cloud.google.com/auth/audience</span></div>
   <ol class="steps">
     <li><b>用户类型</b>选「<b>外部</b>」；个人 Gmail 只能选外部，若你有 Workspace 企业邮箱可选「内部」（免验证、令牌长期有效）。</li>
     <li><b>发布状态</b>保持「<b>测试中</b>」——不要点「发布应用」（原因见第 8 节）。</li>
@@ -228,6 +255,7 @@
   <figcaption>图 4-1　添加测试用户（示意图）</figcaption>
 
   <h3>4.3 数据访问：添加只读范围</h3>
+  <div class="url"><b>打开这个地址（数据访问 / Scopes）</b><span class="u">https://console.cloud.google.com/auth/scopes</span></div>
   <ol class="steps">
     <li>左侧「<b>数据访问 / Data access</b>」→「添加或移除范围」。</li>
     <li>搜索并勾选：<code>https://www.googleapis.com/auth/gmail.readonly</code>（只读，不能删信、不能发信）。</li>
@@ -361,14 +389,40 @@
 <!-- ================= 10 附录 ================= -->
 <section class="page">
   <h2>10. 附录</h2>
-  <h3>10.1 命令行测速（可选）</h3>
+
+  <h3>10.1 地址清单（按顺序复制打开）</h3>
+  <table>
+    <tr><th style="width:34mm">步骤</th><th>地址</th></tr>
+    <tr><td>新建项目</td><td><code>https://console.cloud.google.com/projectcreate</code></td></tr>
+    <tr><td>启用 Gmail API</td><td><code>https://console.cloud.google.com/apis/library/gmail.googleapis.com</code></td></tr>
+    <tr><td>OAuth 概览（新版）</td><td><code>https://console.cloud.google.com/auth/overview</code></td></tr>
+    <tr><td>品牌信息</td><td><code>https://console.cloud.google.com/auth/branding</code></td></tr>
+    <tr><td>受众群体 / 测试用户</td><td><code>https://console.cloud.google.com/auth/audience</code></td></tr>
+    <tr><td>数据访问（只读范围）</td><td><code>https://console.cloud.google.com/auth/scopes</code></td></tr>
+    <tr><td>客户端列表</td><td><code>https://console.cloud.google.com/auth/clients</code></td></tr>
+    <tr><td>创建客户端（桌面应用）</td><td><code>https://console.cloud.google.com/auth/clients/create</code></td></tr>
+    <tr><td>旧版 OAuth 同意屏幕</td><td><code>https://console.cloud.google.com/apis/credentials/consent</code></td></tr>
+    <tr><td>API 和服务凭据</td><td><code>https://console.cloud.google.com/apis/credentials</code></td></tr>
+  </table>
+  <p class="copy-tip">提示：如果打开链接后想确认当前项目，看页面顶部的项目选择器是否显示 <code>MailHarbor</code>；链接会自动带上项目参数。</p>
+
+  <h3>10.2 软件里要填的页面地址（GitHub Pages）</h3>
+  <table>
+    <tr><th style="width:34mm">OAuth 同意屏幕字段</th><th>填写内容</th></tr>
+    <tr><td>应用首页</td><td><code>https://moneyfly006.github.io/mailharbor/</code></td></tr>
+    <tr><td>隐私政策链接</td><td><code>https://moneyfly006.github.io/mailharbor/privacy.html</code></td></tr>
+    <tr><td>服务条款链接</td><td><code>https://moneyfly006.github.io/mailharbor/terms.html</code></td></tr>
+    <tr><td>品牌图标 120×120</td><td><code>https://moneyfly006.github.io/mailharbor/img/icon-120.png</code></td></tr>
+  </table>
+
+  <h3>10.3 命令行测速（可选）</h3>
   <p>软件内已有速度显示；如果想单独对比 Gmail API 与 IMAP，可在安装目录运行：</p>
   <pre style="background:var(--paper);border:1px solid var(--rule);border-radius:1.4mm;padding:3mm;font-family:var(--mono);font-size:8.6pt;line-height:1.8">node scripts/gmail-api-speed.mjs --client-id=你的ID --client-secret=你的密钥
 # 或复用已保存令牌
 node scripts/gmail-api-speed.mjs</pre>
   <p>脚本会打印授权链接、下载一个 5–60MB 附件并输出速度；令牌保存在用户目录，7 天有效。</p>
 
-  <h3>10.2 IMAP 断点续传说明</h3>
+  <h3>10.4 IMAP 断点续传说明</h3>
   <p>
     除 Gmail API 外，软件对 IMAP 大附件还支持「分块下载 + 断点续传」：把整封邮件按 4MB 分块并行拉取，
     已完成块记录在本地状态文件里；网络中断后重试只补缺失块，不从头重下。
