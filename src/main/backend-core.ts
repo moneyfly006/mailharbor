@@ -645,6 +645,18 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         emit({ type: 'gmail:auth', accountId, authorized: false })
         emit({ type: 'dashboard:changed' })
       },
+      fetchDriveAndArchive: async (messageId: number) => {
+        const msg = repos.getMessage(messageId)
+        if (!msg) return { ok: false, message: '找不到这封邮件' }
+        const links = (() => {
+          try {
+            return JSON.parse(msg.links ?? '[]') as string[]
+          } catch {
+            return [] as string[]
+          }
+        })()
+        return gdrive.fetchAndArchive(messageId, links)
+      },
       test: async (accountId: number) => {
         const client = await gmailClientFor(accountId)
         if (!client) return { ok: false, message: '尚未授权 Gmail API' }

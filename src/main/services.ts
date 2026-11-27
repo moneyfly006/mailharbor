@@ -37,6 +37,8 @@ export interface Backend {
     reauthorize(accountId: number): Promise<{ authUrl: string }>
     revoke(accountId: number): void
     test(accountId: number): Promise<{ ok: boolean; email?: string; message?: string }>
+    /** 直接下载该邮件里的 Google Drive 超大附件并归档 */
+    fetchDriveAndArchive(messageId: number): Promise<{ ok: boolean; files?: number; message?: string; archived?: number; extracted?: number }>
   }
   /** 测试「还没保存」的表单（新建账户向导用） */
   testAccount(input: AccountInput): Promise<TestResult>

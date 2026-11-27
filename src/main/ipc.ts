@@ -15,6 +15,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isBigAttachmentLink } from './pipeline'
 import { downloadLinkedFile } from './link-download'
+import { extractDriveFileIds } from './gmail/drive'
 import { openQqLogin } from './qq-web'
 
 export interface IpcContext {
@@ -258,6 +259,12 @@ export function registerIpc(context: IpcContext): void {
       const record = repos.getRecordById(messageId)
       const url = record?.links.find(isBigAttachmentLink)
       if (!record || record.status !== 'manual_needed' || !url) return { ok: false, message: '找不到待下载文件' }
+      // Google Drive 链接：直接走 Drive API 后台下载（比打开网页点下载更可靠），下载后自动归档
+      if (extractDriveFileIds(record.links).length > 0) {
+        const r = await requireBackend().gmail.fetchDriveAndArchive(messageId)
+        ctx?.broadcast({ type: 'dashboard:changed' })
+        return r
+      }
       if (linkArchives.has(messageId)) return { ok: false, message: '这封邮件正在下载或归档' }
       linkArchives.add(messageId)
       try {
