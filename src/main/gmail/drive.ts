@@ -4,7 +4,9 @@
  * 需要 OAuth scope：drive.readonly（与 gmail.readonly 一起授权）。
  * 下载走 HTTPS（alt=media），流式写盘，400MB 也不占内存。
  */
-import { createWriteStream } from 'node:fs'
+import { createWriteStream, existsSync, renameSync, rmSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { sanitizeFilename } from '../file-writer'
 import { pipeline } from 'node:stream/promises'
 import { createHash } from 'node:crypto'
 import { httpsRequestText, httpsRequest, type ProxyTarget } from '../net/http-proxy-client'
@@ -141,11 +143,23 @@ export class DriveDownloader {
       }
     })
     await pipeline(res, createWriteStream(destPath))
+    // Gmail Drive 文件下载后必须改回真实文件名（如 原图.rar），否则后续不会识别为压缩包、不会解压
+    let finalPath = destPath
+    if (info.name && info.name !== basename(destPath)) {
+      try {
+        const real = join(dirname(destPath), sanitizeFilename(info.name, 'drive-file'))
+        if (existsSync(real)) rmSync(real, { force: true })
+        renameSync(destPath, real)
+        finalPath = real
+      } catch {
+        /* 改名失败则保留临时名 */
+      }
+    }
     try {
       onProgress?.(received, received)
     } catch {
       /* ignore */
     }
-    return { path: destPath, filename: info.name, size: received, sha256: hash.digest('hex') }
+    return { path: finalPath, filename: info.name, size: received, sha256: hash.digest('hex') }
   }
 }
