@@ -1,6 +1,6 @@
 {
   "name": "mailharbor",
-  "version": "0.1.42",
+  "version": "0.1.43",
   "description": "MailHarbor · 邮件图稿自动归档（IMAP 收信 / SMTP 回信）",
   "main": "out/main/index.js",
   "author": "MailHarbor",
