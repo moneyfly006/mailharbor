@@ -23,6 +23,7 @@ import {
 } from './providers/imap'
 import { testSmtpConnection } from './smtp'
 import { GmailApiClient } from './gmail/client'
+import { DriveDownloader, extractDriveFileIds } from './gmail/drive'
 import { startGmailAuth } from './gmail/oauth'
 import { resolveProxy } from './net/proxy'
 import type { TestResultLine } from '@shared/types'
@@ -221,6 +222,94 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Google Drive 超大附件（Gmail >25MB 的附件会放在 Drive，邮件里只有链接）
+  // ---------------------------------------------------------------------------
+  const driveClients = new Map<number, DriveDownloader>()
+  const driveClientFor = async (accountId: number): Promise<DriveDownloader | null> => {
+    const cached = driveClients.get(accountId)
+    if (cached) return cached
+    const row = repos.getOAuthToken(accountId)
+    if (!row) return null
+    const secrets = repos.getOAuthSecrets(accountId)
+    if (!secrets.refreshToken) return null
+    let proxy = null
+    try {
+      proxy = await resolveProxy(deps.getSetting('proxy'))
+    } catch {
+      proxy = null
+    }
+    const client = new DriveDownloader({
+      clientId: row.client_id,
+      clientSecret: secrets.clientSecret,
+      refreshToken: secrets.refreshToken,
+      proxy
+    })
+    driveClients.set(accountId, client)
+    return client
+  }
+  let archiveManualRef: ((messageId: number, files: string[]) => Promise<{ ok: boolean; archived?: number; extracted?: number; message?: string }>) | null = null
+  const gdrive = {
+    canHandle: (links: string[]): boolean => extractDriveFileIds(links).length > 0,
+    fetchAndArchive: async (messageId: number, links: string[]): Promise<{ ok: boolean; files?: number; message?: string }> => {
+      const msg = repos.getMessage(messageId)
+      if (!msg) return { ok: false, message: '找不到这封邮件' }
+      const account = repos.getAccount(msg.account_id)
+      if (!account) return { ok: false, message: '找不到对应邮箱账户' }
+      const client = await driveClientFor(account.id)
+      if (!client) return { ok: false, message: 'Gmail 尚未授权；请到「邮箱账户」页点「重新授权」（需包含 Drive 只读权限）' }
+      const ids = extractDriveFileIds(links)
+      const files: string[] = []
+      for (const [index, id] of ids.entries()) {
+        const dest = join(deps.tmpDir, `drive-${messageId}-${index}.part`)
+        try {
+          const r = await client.download(id, dest, (received, total) => {
+            emit({
+              type: 'download:progress',
+              progress: {
+                messageId,
+                attachmentId: -(messageId * 100 + index),
+                filename: `Google Drive 文件 ${index + 1}`,
+                received,
+                total,
+                percent: total > 0 ? Math.min(99, Math.round((received / total) * 100)) : null,
+                state: 'active',
+                attempt: 1,
+                bytesPerSec: 0,
+                message: 'Google Drive（HTTPS）',
+                updatedAt: Date.now()
+              }
+            })
+          })
+          files.push(r.path)
+          emit({
+            type: 'download:progress',
+            progress: {
+              messageId,
+              attachmentId: -(messageId * 100 + index),
+              filename: r.filename,
+              received: r.size,
+              total: r.size,
+              percent: 100,
+              state: 'done',
+              attempt: 1,
+              bytesPerSec: 0,
+              updatedAt: Date.now()
+            }
+          })
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e)
+          emit({ type: 'download:progress', progress: { messageId, attachmentId: -(messageId * 100 + index), filename: `Google Drive 文件 ${index + 1}`, received: 0, total: 0, percent: null, state: 'failed', attempt: 1, bytesPerSec: 0, message: m, updatedAt: Date.now() } })
+          return { ok: false, message: `Drive 下载失败：${m}` }
+        }
+      }
+      if (files.length === 0) return { ok: false, message: '没有可下载的 Drive 文件' }
+      if (!archiveManualRef) return { ok: false, message: '归档服务未就绪' }
+      const res = await archiveManualRef(messageId, files)
+      return { ok: res.ok, files: files.length, message: res.message }
+    }
+  }
+
   const pipeline = new MailPipeline({
     emit,
     getSetting: deps.getSetting,
@@ -229,6 +318,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     tmpDir: deps.tmpDir,
     linkedFiles: deps.linkedFiles,
     gmail: gmailDownloader,
+    gdrive,
     now
   })
   dispatcher.onSettled = (messageId) => pipeline.onDeliveriesSettled(messageId)
@@ -305,9 +395,99 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
 
   function startAutoRetry(): void {
     if (autoRetryTimer) return
-    autoRetryTimer = setInterval(() => void runAutoRetryOnce().catch(() => {}), 30_000)
+    autoRetryTimer = setInterval(() => {
+      void runAutoRetryOnce().catch(() => {})
+      void retryBigAttachments().catch(() => {})
+    }, 30_000)
     autoRetryTimer.unref?.()
     void runAutoRetryOnce().catch(() => {})
+    void retryBigAttachments().catch(() => {})
+  }
+
+  /**
+   * 超大附件自动重试：QQ 网页登录完成后 / Drive 权限就绪后，
+   * 自动把「超大附件·待下载」的邮件下载并归档，无需用户逐条点。
+   */
+  const bigAttachmentInFlight = new Set<number>()
+
+  async function retryBigAttachments(): Promise<number> {
+    if (disposed) return 0
+    if (deps.getSetting<boolean>('autoRetryFailed') === false) return 0
+    let count = 0
+    const rows = repos.listManualNeededForRetry(2)
+    for (const row of rows) {
+      // 防重入：同一封邮件在下载中时不要再触发（否则每 30 秒开一个新下载，互相抢带宽）
+      if (bigAttachmentInFlight.has(row.id)) continue
+      bigAttachmentInFlight.add(row.id)
+      try {
+      const msg = repos.getMessage(row.id)
+      if (!msg) continue
+      const account = repos.getAccount(row.account_id)
+      if (!account) continue
+      let links: string[] = []
+      try {
+        links = JSON.parse(row.links ?? '[]') as string[]
+      } catch {
+        links = []
+      }
+      if (links.length === 0) continue
+      // 1) Google Drive 链接：Gmail/Drive 已授权时自动下载
+      if (gdrive.canHandle(links)) {
+        try {
+          const r = await gdrive.fetchAndArchive(row.id, links)
+          if (r.ok) {
+            repos.clearMessageAutoRetry(row.id)
+            repos.markOAuthError(row.account_id, null)
+            count++
+            emit({ type: 'toast', level: 'success', title: '超大附件已自动下载', body: '来自 Google Drive，已归档并回信' })
+            emit({ type: 'dashboard:changed' })
+            continue
+          }
+          repos.bumpMessageAutoRetry(row.id, Date.now() + 30 * 60_000)
+          console.log(`[big-attachment] Drive 自动下载未完成 #${row.id}: ${r.message ?? ''}`)
+          continue
+        } catch (e) {
+          repos.bumpMessageAutoRetry(row.id, Date.now() + 30 * 60_000)
+          console.warn('[big-attachment] Drive 自动下载异常', e instanceof Error ? e.message : String(e))
+          continue
+        }
+      }
+      // 2) QQ 超大附件：需要 QQ 网页登录会话（qqWebEnabled），登录后自动下载
+      const linkedFiles = deps.linkedFiles
+      if (!linkedFiles) continue
+      const supported = links.filter((url) => linkedFiles.supports(account, url))
+      if (supported.length === 0) continue
+      try {
+        const files: string[] = []
+        for (const url of supported) {
+          const key = require('node:crypto').createHash('sha256').update(url).digest('hex').slice(0, 16)
+          const dest = `${deps.tmpDir}/qq-big-${row.id}-${key}.part`
+          const file = await linkedFiles.download(account.id, row.id, url, dest)
+          if (file?.path) files.push(file.path)
+        }
+        if (files.length === 0) {
+          repos.bumpMessageAutoRetry(row.id, Date.now() + 30 * 60_000)
+          continue
+        }
+        const res = await archiveManualRef?.(row.id, files)
+        if (res?.ok) {
+          repos.clearMessageAutoRetry(row.id)
+          count++
+          emit({ type: 'toast', level: 'success', title: '超大附件已自动下载', body: '来自 QQ 文件中转站，已归档并回信' })
+          emit({ type: 'dashboard:changed' })
+        } else {
+          repos.bumpMessageAutoRetry(row.id, Date.now() + 30 * 60_000)
+          console.log(`[big-attachment] QQ 自动归档未完成 #${row.id}: ${res?.message ?? ''}`)
+        }
+      } catch (e) {
+        repos.bumpMessageAutoRetry(row.id, Date.now() + 30 * 60_000)
+        console.warn('[big-attachment] QQ 自动下载异常', e instanceof Error ? e.message : String(e))
+      }
+      } finally {
+        bigAttachmentInFlight.delete(row.id)
+      }
+    }
+    return count
   }
 
   /** 启动时清理 24 小时前的下载临时文件（.part/.eml），避免磁盘越占越多 */
@@ -412,6 +592,53 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
           })
         return { authUrl: session.authUrl, cancel: session.cancel }
       },
+      reauthorize: async (accountId: number) => {
+        const account = repos.getAccount(accountId)
+        const row = repos.getOAuthToken(accountId)
+        if (!account || !row) throw new Error('还没有授权记录，请先用客户端 ID / 密钥授权')
+        const secrets = repos.getOAuthSecrets(accountId)
+        if (!secrets.clientSecret) throw new Error('本机保存的客户端密钥不可用，请重新填写并授权')
+        let proxy = null
+        try {
+          proxy = await resolveProxy(deps.getSetting('proxy'))
+        } catch {
+          proxy = null
+        }
+        const session = await startGmailAuth({ clientId: row.client_id, clientSecret: secrets.clientSecret, proxy })
+        void session.wait
+          .then((tokens) => {
+            repos.saveOAuthToken({
+              accountId,
+              provider: 'gmail',
+              email: account.email,
+              clientId: row.client_id,
+              clientSecret: secrets.clientSecret,
+              refreshToken: tokens.refreshToken,
+              accessToken: tokens.accessToken,
+              expiry: tokens.expiry
+            })
+            gmailClients.delete(accountId)
+            driveClients.delete(accountId)
+            const scope = tokens.scope ?? ''
+            if (!/drive\.readonly|drive\.file|drive\b/.test(scope)) {
+              emit({
+                type: 'toast',
+                level: 'warn',
+                title: '重新授权完成，但未获得 Drive 权限',
+                body: '请再点一次「重新授权」，在 Google 页面勾选「查看你的 Google 云端硬盘文件」后点允许'
+              })
+            } else {
+              emit({ type: 'toast', level: 'success', title: '重新授权成功', body: 'Gmail 与 Drive 权限已更新' })
+            }
+            emit({ type: 'gmail:auth', accountId, authorized: true })
+            emit({ type: 'dashboard:changed' })
+          })
+          .catch((e) => {
+            emit({ type: 'gmail:auth', accountId, authorized: false, error: e instanceof Error ? e.message : String(e) })
+            emit({ type: 'toast', level: 'error', title: '重新授权失败', body: e instanceof Error ? e.message : String(e) })
+          })
+        return { authUrl: session.authUrl }
+      },
       revoke: (accountId: number) => {
         repos.deleteOAuthToken(accountId)
         gmailClients.delete(accountId)
@@ -421,7 +648,14 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       test: async (accountId: number) => {
         const client = await gmailClientFor(accountId)
         if (!client) return { ok: false, message: '尚未授权 Gmail API' }
-        return client.test()
+        const g = await client.test()
+        if (!g.ok) return g
+        const drive = await driveClientFor(accountId)
+        if (!drive) return { ...g, message: 'Gmail 正常；但尚无 Drive 授权（超大附件无法自动下载，请点「重新授权」）' }
+        const d = await drive.ping()
+        return d.ok
+          ? { ...g, message: 'Gmail + Drive（超大附件）均正常' }
+          : { ...g, message: `Gmail 正常；Drive：${d.message ?? '不可用'}` }
       }
     },
     async testAccount(input: AccountInput): Promise<TestResult> {
@@ -666,6 +900,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       replyService.dispose()
     }
   }
+  archiveManualRef = (messageId, files) => backend.archiveManualFiles(messageId, files)
   return backend
 }
 

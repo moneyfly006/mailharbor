@@ -49,14 +49,20 @@ export function GmailAccel({ accounts }: { accounts: Account[] }): JSX.Element |
   const statusOf = (id: number): StatusRow | undefined => status.find((s) => s.accountId === id)
 
   const authorize = async (account: Account): Promise<void> => {
-    if (!clientId.trim() || !clientSecret.trim()) {
+    const authorized = Boolean(statusOf(account.id))
+    if (!authorized && (!clientId.trim() || !clientSecret.trim())) {
       setOpen(true)
       pushToast('warn', '先填 OAuth 客户端 ID / 密钥', '在 Google Cloud → 客户端（桌面应用）里创建')
       return
     }
     setBusy(account.id)
     try {
-      await api.gmail.startAuth(account.id, clientId.trim(), clientSecret.trim())
+      if (authorized) {
+        // 已授权过：直接用本机保存的客户端凭据重新授权（例如新增 Drive 权限），不用再填
+        await api.gmail.reauthorize(account.id)
+      } else {
+        await api.gmail.startAuth(account.id, clientId.trim(), clientSecret.trim())
+      }
       pushToast('success', '已打开授权页面', '在浏览器登录并点「允许」，完成后这里会自动刷新')
       let elapsed = 0
       if (pollRef.current) clearInterval(pollRef.current)
@@ -99,7 +105,10 @@ export function GmailAccel({ accounts }: { accounts: Account[] }): JSX.Element |
     <section className="card gmail-accel" aria-label="Gmail 加速">
       <div className="ga-hd">
         <h2>Gmail 加速（API）</h2>
-        <span className="ga-note">附件走 HTTPS 下载，实测比 IMAP 快 3–6 倍；收信/回信逻辑不变</span>
+        <span className="ga-note">
+          附件走 HTTPS 下载，实测比 IMAP 快 3–6 倍；同时可自动下载 Gmail 超大附件（Google Drive 链接）。
+          若提示「未授权 Drive 权限」，点「重新授权」一次即可。
+        </span>
         <button type="button" className="ga-toggle" onClick={() => setOpen((v) => !v)}>
           {open ? '收起配置' : '配置 OAuth 客户端'}
         </button>

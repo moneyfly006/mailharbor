@@ -218,6 +218,12 @@ export function registerIpc(context: IpcContext): void {
     return { authUrl: session.authUrl }
   })
 
+  ipcMain.handle(IPC.gmailReauthorize, async (_e, accountId: number) => {
+    const r = await requireBackend().gmail.reauthorize(Number(accountId))
+    await shell.openExternal(r.authUrl)
+    return r
+  })
+
   ipcMain.handle(IPC.gmailRevoke, (_e, accountId: number) => {
     requireBackend().gmail.revoke(Number(accountId))
     ctx?.broadcast({ type: 'gmail:auth', accountId: Number(accountId), authorized: false })

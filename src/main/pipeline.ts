@@ -83,6 +83,11 @@ export interface PipelineDeps {
     supports(account: Account, url: string): boolean
     download(accountId: number, messageId: number, url: string, dest: string): Promise<{ path: string; filename: string } | null>
   }
+  /** Google Drive 超大附件：识别正文里的 Drive 链接并自动下载归档 */
+  gdrive?: {
+    canHandle(links: string[]): boolean
+    fetchAndArchive(messageId: number, links: string[]): Promise<{ ok: boolean; files?: number; message?: string }>
+  }
   /** Gmail API 加速下载（可选；返回 null 表示不可用 → 回退 IMAP） */
   gmail?: {
     download(opts: {
@@ -234,6 +239,26 @@ export class MailPipeline {
           }
         }
       }
+      // Gmail 超大附件（>25MB）会放在 Google Drive：识别 Drive 链接并自动下载归档
+      const gdrive = this.deps.gdrive
+      if (gdrive && gdrive.canHandle(msg.bodyLinks)) {
+        try {
+          this.log.info(`检测到 Google Drive 链接，尝试自动下载：${msg.subject}`)
+          const r = await gdrive.fetchAndArchive(messageId, msg.bodyLinks)
+          if (r.ok) {
+            const finalStatus = repos.getMessage(messageId)?.status ?? 'queued'
+            this.emitRecord(messageId)
+            this.deps.emit({ type: 'delivery:changed', messageId })
+            this.deps.dispatcher.schedule()
+            this.log.info(`Drive 超大附件已自动下载并归档：${msg.subject}`)
+            return { messageId, status: finalStatus, matchedRuleIds: hitRules.map((h) => h.rule.id), deliveryCount: r.files ?? 0, skipped: false }
+          }
+          this.log.warn(`Drive 自动下载未完成：${r.message ?? ''}`)
+        } catch (e) {
+          this.log.warn(`Drive 自动下载异常：${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+
       repos.clearMessageAutoRetry(messageId)
       repos.updateMessageStatus(
         messageId,

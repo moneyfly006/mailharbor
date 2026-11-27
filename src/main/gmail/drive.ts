@@ -1,0 +1,151 @@
+/**
+ * Google Drive 附件下载（Gmail 超大附件：大于 25MB 时 Gmail 会把文件放到 Drive，邮件里只有链接）。
+ *
+ * 需要 OAuth scope：drive.readonly（与 gmail.readonly 一起授权）。
+ * 下载走 HTTPS（alt=media），流式写盘，400MB 也不占内存。
+ */
+import { createWriteStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
+import { createHash } from 'node:crypto'
+import { httpsRequestText, httpsRequest, type ProxyTarget } from '../net/http-proxy-client'
+import { refreshAccessToken } from './oauth'
+
+const DRIVE = 'https://www.googleapis.com/drive/v3'
+
+/** 从邮件正文链接里找出 Google Drive 文件 */
+export function extractDriveFileIds(links: string[]): string[] {
+  const ids = new Set<string>()
+  for (const raw of links) {
+    let u: URL
+    try {
+      u = new URL(raw)
+    } catch {
+      continue
+    }
+    if (u.protocol !== 'https:') continue
+    const host = u.hostname
+    if (host === 'drive.google.com') {
+      const m = /^\/file\/d\/([A-Za-z0-9_-]{10,})/.exec(u.pathname)
+      if (m) ids.add(m[1]!)
+      const q = u.searchParams.get('id')
+      if (q) ids.add(q)
+    } else if (host === 'docs.google.com') {
+      const m = /\/d\/([A-Za-z0-9_-]{10,})/.exec(u.pathname)
+      if (m) ids.add(m[1]!)
+    }
+  }
+  return [...ids]
+}
+
+export interface DriveDownloadResult {
+  path: string
+  filename: string
+  size: number
+  sha256: string
+}
+
+export class DriveDownloader {
+  private opts: { clientId: string; clientSecret: string; refreshToken: string; proxy?: ProxyTarget | null }
+  private accessToken: string | null = null
+  private expiry = 0
+  private refreshing: Promise<string> | null = null
+
+  constructor(opts: { clientId: string; clientSecret: string; refreshToken: string; proxy?: ProxyTarget | null }) {
+    this.opts = opts
+  }
+
+  private async token(): Promise<string> {
+    if (this.accessToken && Date.now() < this.expiry - 60_000) return this.accessToken
+    if (this.refreshing) return this.refreshing
+    this.refreshing = (async () => {
+      try {
+        const r = await refreshAccessToken({
+          clientId: this.opts.clientId,
+          clientSecret: this.opts.clientSecret,
+          refreshToken: this.opts.refreshToken,
+          proxy: this.opts.proxy ?? null
+        })
+        this.accessToken = r.accessToken
+        this.expiry = r.expiry
+        return r.accessToken
+      } finally {
+        this.refreshing = null
+      }
+    })()
+    return this.refreshing
+  }
+
+  /** 连通性检查：能列出 Drive 文件即说明 drive.readonly 权限已生效 */
+  async ping(): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const token = await this.token()
+      const { status, text } = await httpsRequestText(`${DRIVE}/files?pageSize=1&fields=files(id,name)`, {
+        headers: { Authorization: `Bearer ${token}` },
+        proxy: this.opts.proxy ?? null
+      })
+      if (status >= 400) {
+        const needReauth = status === 403 || /insufficient|scope/i.test(text)
+        return { ok: false, message: needReauth ? '尚未获得 Drive 权限，请点「重新授权」并勾选 Drive 只读' : `Drive API ${status}: ${text.slice(0, 120)}` }
+      }
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async meta(fileId: string): Promise<{ name: string; size: number; mimeType: string }> {
+    const token = await this.token()
+    const { status, text } = await httpsRequestText(
+      `${DRIVE}/files/${encodeURIComponent(fileId)}?fields=name,size,mimeType&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${token}` }, proxy: this.opts.proxy ?? null }
+    )
+    if (status >= 400) throw new Error(`读取 Drive 文件信息失败：HTTP ${status} ${text.slice(0, 160)}`)
+    const json = JSON.parse(text) as { name?: string; size?: string; mimeType?: string }
+    return { name: json.name ?? 'drive-file', size: Number(json.size ?? 0), mimeType: json.mimeType ?? '' }
+  }
+
+  /** 下载到指定路径（流式） */
+  async download(
+    fileId: string,
+    destPath: string,
+    onProgress?: (received: number, total: number) => void
+  ): Promise<DriveDownloadResult> {
+    const token = await this.token()
+    const info = await this.meta(fileId).catch(() => ({ name: 'drive-file', size: 0, mimeType: '' }))
+    const res = await httpsRequest(
+      `${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        proxy: this.opts.proxy ?? null,
+        timeoutMs: 30 * 60_000
+      }
+    )
+    if ((res.statusCode ?? 0) >= 400) {
+      throw new Error(`下载 Drive 文件失败：HTTP ${res.statusCode}`)
+    }
+    const hash = createHash('sha256')
+    let received = 0
+    let last = 0
+    const total = info.size
+    res.on('data', (chunk: Buffer) => {
+      received += chunk.length
+      hash.update(chunk)
+      const now = Date.now()
+      if (onProgress && now - last > 300) {
+        last = now
+        try {
+          onProgress(received, total)
+        } catch {
+          /* ignore */
+        }
+      }
+    })
+    await pipeline(res, createWriteStream(destPath))
+    try {
+      onProgress?.(received, received)
+    } catch {
+      /* ignore */
+    }
+    return { path: destPath, filename: info.name, size: received, sha256: hash.digest('hex') }
+  }
+}

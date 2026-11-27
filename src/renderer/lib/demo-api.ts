@@ -377,6 +377,7 @@ export function createDemoApi(): Api {
     gmail: {
     status: async () => [{ accountId: 1, email: 'demo@gmail.com', provider: 'gmail', expiry: Date.now() + 6 * 86400_000, daysLeft: 6, needsReauth: false, lastError: null }],
     startAuth: async () => ({ authUrl: 'https://accounts.google.com/' }),
+    reauthorize: async () => ({ authUrl: 'https://accounts.google.com/' }),
     revoke: async () => {},
     test: async () => ({ ok: true, email: 'demo@gmail.com' })
   },

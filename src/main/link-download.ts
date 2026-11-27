@@ -1,7 +1,8 @@
 import { app, BrowserWindow, session } from 'electron'
 import type { DownloadItem } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { renameSync, existsSync, rmSync } from 'node:fs'
 import type { DownloadProgress } from '@shared/types'
 import { sanitizeFilename } from './file-writer'
 import { BUSINESS_DEFAULT_TYPES, isAllowedAttachment } from './rule-engine'
@@ -73,19 +74,78 @@ export async function downloadLinkedFile(options: {
   }
   configure(win)
 
+  // QQ 超大附件页面（wx.mail.qq.com/ftn/download）不会自己开始下载，
+  // 需要点页面上的「下载」按钮。这里在页面加载后自动点击，省去用户手动操作。
+  // 不抓真实下载链接：链接带时效签名，抓出来容易失效；点击按钮最稳。
+  let clickTimer: NodeJS.Timeout | undefined
+  let clickAttempts = 0
+  let settled = false
+  const stopAutoClick = (): void => {
+    if (clickTimer) {
+      clearInterval(clickTimer)
+      clickTimer = undefined
+    }
+  }
+  const autoClickDownload = async (): Promise<void> => {
+    if (win.isDestroyed() || settled) return
+    try {
+      const clicked = (await win.webContents.executeJavaScript(
+        `(() => {
+          const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' };
+          const nodes = [...document.querySelectorAll('a, button, [role="button"], div, span')];
+          const cands = nodes.filter((el) => visible(el) && (el.textContent || '').trim() === '下载');
+          const target = cands[0] || nodes.find((el) => visible(el) && (el.textContent || '').trim().startsWith('下载'));
+          if (target) { target.click(); return true }
+          return false;
+        })()`,
+        true
+      )) as boolean
+      if (clicked) {
+        log.info('已自动点击页面「下载」按钮', { attempts: clickAttempts + 1 })
+        clickAttempts++
+        // 触发点击后停止继续点（避免重复下载）；下载事件会接住文件
+        if (clickAttempts >= 2) stopAutoClick()
+      }
+    } catch {
+      /* 页面还没加载好或已关闭 */
+    }
+    clickAttempts++
+    if (clickAttempts > 30) stopAutoClick()
+  }
+  win.webContents.on('did-finish-load', () => {
+    stopAutoClick()
+    clickAttempts = 0
+    clickTimer = setInterval(() => void autoClickDownload(), 2000)
+    void autoClickDownload()
+  })
+
   return new Promise<{ path: string; filename: string } | null>((resolve, reject) => {
     let item: DownloadItem | null = null
-    let settled = false
     let pageTimer: NodeJS.Timeout | undefined
     let totalTimer: NodeJS.Timeout | undefined
     const finish = (file: { path: string; filename: string } | null, error?: Error): void => {
       if (settled) return
       settled = true
+      stopAutoClick()
       clearInterval(pageTimer)
       clearTimeout(totalTimer)
       browserSession.removeListener('will-download', onDownload)
       item?.cancel()
       for (const window of windows) if (!window.isDestroyed()) window.destroy()
+      // 下载保存路径是临时 .part 名；这里改回真实文件名（如 原图.rar），
+      // 否则后续归档会把 .part 当普通文件、不会解压。
+      if (file && background) {
+        try {
+          const real = join(dirname(file.path), file.filename)
+          if (real !== file.path) {
+            if (existsSync(real)) rmSync(real, { force: true })
+            renameSync(file.path, real)
+            file = { ...file, path: real }
+          }
+        } catch {
+          /* 重命名失败则保留原路径 */
+        }
+      }
       if (error) reject(error)
       else resolve(file)
     }

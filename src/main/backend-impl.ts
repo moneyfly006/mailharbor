@@ -14,6 +14,18 @@ import { downloadLinkedFile } from './link-download'
 
 export function createBackendImpl(ctx: { bus: EventEmitter }): Backend {
   const db = openDb()
+  /** 找一个已登录 QQ 网页的账户 id（settings 里 qqWebEnabled:<id>=true） */
+  const qqSessionAccountId = (): number | null => {
+    try {
+      const row = db
+        .prepare("SELECT key FROM settings WHERE key LIKE 'qqWebEnabled:%' AND (value='true' OR value='1' OR value LIKE '%true%') LIMIT 1")
+        .get() as { key?: string } | undefined
+      const id = row?.key ? Number(String(row.key).split(':')[1]) : NaN
+      return Number.isFinite(id) ? id : null
+    } catch {
+      return null
+    }
+  }
   return createBackendWith({
     db,
     bus: ctx.bus,
@@ -21,14 +33,20 @@ export function createBackendImpl(ctx: { bus: EventEmitter }): Backend {
     getSetting,
     tmpDir: join(app.getPath('temp'), 'mailharbor'),
     linkedFiles: {
-      supports: (account, url) => account.preset === 'qq' && !!getSetting(`qqWebEnabled:${account.id}`) && qqFileLink(url),
-      download: (accountId, messageId, url, dest) => downloadLinkedFile({
-        accountId,
-        messageId,
-        url,
-        background: { dest, timeoutMs: Math.max(60, Number(getSetting('downloadTimeoutSec')) || 900) * 1000 },
-        onProgress: (progress) => ctx.bus.emit('event', { type: 'download:progress', progress } satisfies MainEvent)
-      })
+      // QQ 超大附件链接（wx.mail.qq.com / ftn.qq.com）只要本机有任一已登录的 QQ 网页会话即可下载，
+      // 不要求「收到这封邮件的账户」是 QQ 账户——Gmail 收到 QQ 超大附件链接也能自动下载。
+      supports: (_account, url) => qqFileLink(url) && qqSessionAccountId() !== null,
+      download: (_accountId, messageId, url, dest) => {
+        const sid = qqSessionAccountId()
+        if (!sid) throw new Error('还没有登录 QQ 网页，请到「邮箱账户」页点「登录 QQ 网页」')
+        return downloadLinkedFile({
+          accountId: sid,
+          messageId,
+          url,
+          background: { dest, timeoutMs: Math.max(60, Number(getSetting('downloadTimeoutSec')) || 900) * 1000 },
+          onProgress: (progress) => ctx.bus.emit('event', { type: 'download:progress', progress } satisfies MainEvent)
+        })
+      }
     }
   })
 }

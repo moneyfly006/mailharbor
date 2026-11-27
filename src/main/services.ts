@@ -33,6 +33,8 @@ export interface Backend {
       clientId: string,
       clientSecret: string
     ): Promise<{ authUrl: string; cancel: () => void }>
+    /** 用已保存的客户端 ID/密钥重新授权（用于 scope 升级：Gmail + Drive） */
+    reauthorize(accountId: number): Promise<{ authUrl: string }>
     revoke(accountId: number): void
     test(accountId: number): Promise<{ ok: boolean; email?: string; message?: string }>
   }

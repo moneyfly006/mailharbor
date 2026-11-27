@@ -31,6 +31,7 @@ const api: Api = {
   gmail: {
     status: () => invoke(IPC.gmailStatus),
     startAuth: (accountId, clientId, clientSecret) => invoke(IPC.gmailAuthStart, accountId, clientId, clientSecret),
+    reauthorize: (accountId) => invoke(IPC.gmailReauthorize, accountId),
     revoke: (accountId) => invoke(IPC.gmailRevoke, accountId),
     test: (accountId) => invoke(IPC.gmailTest, accountId)
   },

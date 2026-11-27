@@ -10,7 +10,12 @@ import http from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
 import { httpsRequestText, type ProxyTarget } from '../net/http-proxy-client'
 
-const SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  // Gmail 超过 25MB 的附件会放到 Google Drive，需要只读权限才能自动下载
+  'https://www.googleapis.com/auth/drive.readonly'
+]
+const SCOPE = SCOPES.join(' ')
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 
@@ -50,7 +55,7 @@ export async function startGmailAuth(opts: {
     `${AUTH_URL}?client_id=${encodeURIComponent(opts.clientId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&response_type=code&scope=${encodeURIComponent(SCOPE)}` +
-    `&access_type=offline&prompt=consent` +
+    `&access_type=offline&prompt=consent&include_granted_scopes=true` +
     `&code_challenge=${challenge}&code_challenge_method=S256`
 
   let timer: NodeJS.Timeout | null = null

@@ -713,6 +713,17 @@ export function rulePathSummary(): Array<{ ruleId: number; keyword: string; enab
 
 /** 未命中关键词/类型不符的邮件 UID（补扫重跑用） */
 /** 手动重试「下载失败」的邮件：把状态恢复到 queued，附件重置为 pending，便于重新拉取 */
+/** 超大附件（manual_needed）待自动重试：最近 7 天、尝试次数 < 3 */
+export function listManualNeededForRetry(limit = 2): Array<{ id: number; account_id: number; links: string | null; auto_retry_count: number }> {
+  return db()
+    .prepare(
+      `SELECT id, account_id, links, auto_retry_count FROM messages
+       WHERE status='manual_needed' AND received_at > ? AND auto_retry_count < 3
+       ORDER BY id DESC LIMIT ?`
+    )
+    .all(Date.now() - 7 * 86400_000, limit) as Array<{ id: number; account_id: number; links: string | null; auto_retry_count: number }>
+}
+
 /** 自动重试队列：状态为 partial/failed、已到重试时间、且当前没有正在下载的附件 */
 export function listAutoRetryMessages(nowTs: number, limit = 10): Array<{ id: number; account_id: number; imap_uid: number }> {
   return db()
