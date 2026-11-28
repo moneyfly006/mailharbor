@@ -32,6 +32,9 @@ export const IPC = {
   gmailAuthStart: 'gmail:auth-start',
   gmailReauthorize: 'gmail:reauthorize',
   gmailFetchDrive: 'gmail:fetch-drive',
+  downloadPause: 'download:pause',
+  downloadResume: 'download:resume',
+  downloadCancel: 'download:cancel',
   gmailRevoke: 'gmail:revoke',
   gmailTest: 'gmail:test',
   recordsOpenLink: 'records:open-link',
@@ -86,6 +89,11 @@ export interface Api {
       subject: string,
       body?: string
     ): Promise<{ normalized: string; hits: Array<{ ruleId: number; keyword: string; source: 'subject' | 'body' }> }>
+  }
+  downloads: {
+    pause(messageId: number): Promise<void>
+    resume(messageId: number): Promise<void>
+    cancel(messageId: number): Promise<void>
   }
   gmail: {
     status(): Promise<Array<{ accountId: number; email: string; provider: string; expiry: number | null; daysLeft: number | null; needsReauth: boolean; lastError: string | null }>>

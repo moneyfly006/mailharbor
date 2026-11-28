@@ -25,7 +25,7 @@ body {
 body {
   font-family: var(--type-body);
   font-size: var(--text-base);
-  line-height: var(--leading-snug);
+  line-height: var(--leading-normal, 1.6);
   color: var(--color-text-primary);
   background: var(--color-bg-app);
   overflow: hidden;
@@ -94,7 +94,7 @@ a {
 }
 
 .tiny {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .ellipsis {

@@ -24,7 +24,7 @@
   border: 1px solid var(--color-rule-soft);
   border-radius: var(--radius-md);
   background: var(--paper-000);
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--color-text-quaternary);
   width: 250px;
   flex: none;
@@ -47,7 +47,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--ink-800);
 }
 
@@ -57,7 +57,7 @@
 
 .f-search .kbd {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--ink-300);
   border: 1px solid var(--color-rule);
   border-radius: 2px;
@@ -80,7 +80,7 @@
 .f-select {
   width: 150px;
   height: 32px;
-  font-size: 12px;
+  font-size: 14px;
   flex: none;
 }
 
@@ -100,7 +100,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   white-space: nowrap;
   flex: none;
@@ -134,7 +134,7 @@
 
 .rec-hd .cnt {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
 }
 
@@ -170,7 +170,7 @@
 .rec-table th {
   text-align: left;
   font-weight: 500;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.05em;
   color: var(--color-text-quaternary);
   padding: 0 8px 7px;
@@ -191,7 +191,7 @@
   padding: 6px 8px;
   border-bottom: 1px dotted var(--color-rule-dotted);
   vertical-align: middle;
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--color-text-secondary);
 }
 
@@ -209,14 +209,14 @@
 
 .t-time {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 
 .t-acct {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   color: var(--ink-500);
   border: 1px solid var(--color-rule);
@@ -232,7 +232,7 @@
 
 .t-sender {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--ink-700);
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -241,7 +241,7 @@
 }
 
 .t-sender-name {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   margin-top: 2px;
   white-space: nowrap;
@@ -250,7 +250,7 @@
 }
 
 .t-subj {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--color-text-primary);
   line-height: 1.35;
   overflow: hidden;
@@ -264,7 +264,7 @@
   gap: 5px;
   margin-top: 3px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   white-space: nowrap;
   overflow: hidden;
@@ -292,13 +292,13 @@
 }
 
 .t-dim {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
 }
 
 .record-kchip {
   height: 19px;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .pchips {
@@ -310,7 +310,7 @@
 
 .pchips .pchip {
   height: 18px;
-  font-size: 10px;
+  font-size: 12px;
   padding: 0 4px;
 }
 
@@ -328,7 +328,7 @@
 .retry-btn {
   height: 24px;
   padding: 0 7px;
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .retry-btn .ico {
@@ -347,7 +347,7 @@
 }
 
 .rec-ft .mono {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   white-space: nowrap;
 }
@@ -356,7 +356,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   overflow: hidden;
   white-space: nowrap;
@@ -394,7 +394,7 @@
   justify-content: center;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--ink-600);
   padding: 0 5px;
   border: 0;
@@ -431,7 +431,7 @@
 
 .pager-size .select {
   height: 26px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   padding-left: 8px;
   background-position: right 6px center;
 }
@@ -501,7 +501,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--color-text-secondary, #333F4C);
 }
 
@@ -516,11 +516,11 @@
 .dlp-stat {
   margin-left: auto;
   color: var(--color-text-tertiary, #5E6873);
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .dlp-retry {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-warning, #96660F);
   border: 1px solid var(--color-warning-border, rgba(150, 102, 15, 0.3));
   border-radius: 3px;
@@ -562,13 +562,13 @@
 }
 
 .dls-lbl {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-secondary, #333F4C);
 }
 
 .dls-select {
   height: 26px;
-  font-size: 11px;
+  font-size: 13px;
   border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.12));
   border-radius: 4px;
   background: #fff;
@@ -580,7 +580,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-tertiary, #5E6873);
   margin-left: auto;
 }
@@ -633,13 +633,13 @@
 }
 
 .status-progress {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-tertiary, #5E6873);
   white-space: nowrap;
 }
 
 .mailbox-tag {
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--color-warning, #96660F);
   border: 1px solid rgba(150, 102, 15, 0.3);
   border-radius: 3px;
@@ -648,7 +648,7 @@
 }
 
 .ex-tag {
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--color-success, #2C6B4B);
   border: 1px solid rgba(44, 107, 75, 0.3);
   border-radius: 3px;
@@ -679,7 +679,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--ink-500, #5E6873);
   border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.12));
   border-radius: 4px;
@@ -689,7 +689,7 @@
 
 .dls-badge b {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--ink-800, #16202B);
 }
 
@@ -707,7 +707,7 @@
 
 .dls-summary-note {
   margin-left: auto;
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--ink-300, #7C858F);
 }
 
@@ -737,18 +737,18 @@
 
 .dls-title h3 {
   margin: 0 0 2px;
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-family: var(--font-serif);
 }
 
 .dls-title p {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-300, #7C858F);
 }
 
 .dls-tag {
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--ink-300, #7C858F);
   border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.12));
   border-radius: 3px;
@@ -774,7 +774,7 @@
 }
 
 .dls-item .dls-lbl {
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink-700, #333F4C);
 }
@@ -784,7 +784,30 @@
 }
 
 .dls-help {
-  font-size: 9.2px;
+  font-size: 11.2px;
   line-height: 1.5;
   color: var(--ink-300, #7C858F);
+}
+
+/* 下载进度卡片上的操作按钮 */
+.dlp-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.dlp-btn {
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 10px;
+  border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.16));
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink-700, #333F4C);
+  cursor: pointer;
+}
+
+.dlp-btn:hover {
+  border-color: var(--color-accent, #C8422D);
+  color: var(--color-accent, #C8422D);
 }

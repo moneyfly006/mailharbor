@@ -158,18 +158,18 @@
   --type-numeric: var(--font-mono); /* 时间 / 大小 / 路径 / 编号 */
 
   /* 字号阶梯（正文 15–16px 起，适配 1366×768 与 1920×1080） */
-  --text-2xs: 10px; /* 仅用于英文字母大写的微标签 */
-  --text-xs: 11px;
-  --text-sm: 13px; /* 表格次要信息、徽章 */
-  --text-label: 12px; /* 表单标签、辅助说明 */
-  --text-md: 14px; /* 密集表格正文 */
-  --text-base: 15px; /* 默认正文 */
-  --text-lg: 16px; /* 重要正文 / 列表主文 */
-  --text-xl: 18px; /* 卡片小标题 */
-  --text-2xl: 22px; /* 卡片数字 */
-  --text-3xl: 28px; /* 页面标题 */
-  --text-4xl: 34px; /* KPI 数字 */
-  --text-5xl: 44px; /* 单屏主数字 */
+  --text-2xs: 12px; /* 仅用于英文字母大写的微标签 */
+  --text-xs: 13px;
+  --text-sm: 15px; /* 表格次要信息、徽章 */
+  --text-label: 14px; /* 表单标签、辅助说明 */
+  --text-md: 16px; /* 密集表格正文 */
+  --text-base: 17px; /* 默认正文 */
+  --text-lg: 18px; /* 重要正文 / 列表主文 */
+  --text-xl: 20px; /* 卡片小标题 */
+  --text-2xl: 24px; /* 卡片数字 */
+  --text-3xl: 32px; /* 页面标题 */
+  --text-4xl: 38px; /* KPI 数字 */
+  --text-5xl: 50px; /* 单屏主数字 */
 
   --weight-regular: 400;
   --weight-medium: 500;

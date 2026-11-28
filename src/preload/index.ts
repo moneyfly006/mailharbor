@@ -28,6 +28,11 @@ const api: Api = {
     targetsHealth: () => invoke(IPC.ruleTargetsHealth),
     testSubject: (subject, body) => invoke(IPC.rulesTestSubject, subject, body)
   },
+  downloads: {
+    pause: (messageId) => invoke(IPC.downloadPause, messageId),
+    resume: (messageId) => invoke(IPC.downloadResume, messageId),
+    cancel: (messageId) => invoke(IPC.downloadCancel, messageId)
+  },
   gmail: {
     status: () => invoke(IPC.gmailStatus),
     startAuth: (accountId, clientId, clientSecret) => invoke(IPC.gmailAuthStart, accountId, clientId, clientSecret),

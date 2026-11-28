@@ -115,7 +115,14 @@ export class DriveDownloader {
   async downloadParallel(
     fileId: string,
     destPath: string,
-    opts: { connections?: number; chunkBytes?: number; onProgress?: (received: number, total: number) => void } = {}
+    opts: {
+      connections?: number
+      chunkBytes?: number
+      onProgress?: (received: number, total: number) => void
+      /** 返回 true 时暂停（分块之间等待）；抛错表示取消 */
+      isPaused?: () => boolean
+      isCancelled?: () => boolean
+    } = {}
   ): Promise<DriveDownloadResult> {
     const t0 = Date.now()
     const token = await this.token()
@@ -141,6 +148,12 @@ export class DriveDownloader {
           const idx = nextIndex++
           const seg = offsets[idx]
           if (!seg) return
+          // 暂停/取消检查（每块开始前）
+          while (opts.isPaused?.()) {
+            if (opts.isCancelled?.()) throw new Error('下载已取消')
+            await new Promise((r) => setTimeout(r, 400))
+          }
+          if (opts.isCancelled?.()) throw new Error('下载已取消')
           const [start, end] = seg
           const res = await httpsRequest(
             `${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,

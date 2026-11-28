@@ -15,6 +15,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isBigAttachmentLink } from './pipeline'
 import { downloadLinkedFile } from './link-download'
+import { downloadControl } from './download-control'
 import { extractDriveFileIds } from './gmail/drive'
 import { openQqLogin } from './qq-web'
 
@@ -232,6 +233,16 @@ export function registerIpc(context: IpcContext): void {
 
   ipcMain.handle(IPC.gmailTest, (_e, accountId: number) => requireBackend().gmail.test(Number(accountId)))
 
+  ipcMain.handle(IPC.downloadPause, (_e, messageId: number) => {
+    requireBackend().downloads.pause(Number(messageId))
+  })
+  ipcMain.handle(IPC.downloadResume, (_e, messageId: number) => {
+    requireBackend().downloads.resume(Number(messageId))
+  })
+  ipcMain.handle(IPC.downloadCancel, (_e, messageId: number) => {
+    requireBackend().downloads.cancel(Number(messageId))
+  })
+
   ipcMain.handle(IPC.gmailFetchDrive, async (_e, messageId: number) => {
     const r = await requireBackend().gmail.fetchDriveAndArchive(Number(messageId))
     ctx?.broadcast({ type: 'dashboard:changed' })
@@ -274,11 +285,20 @@ export function registerIpc(context: IpcContext): void {
       if (linkArchives.has(messageId)) return { ok: false, message: '这封邮件正在下载或归档' }
       linkArchives.add(messageId)
       try {
+        // 后台静默下载（不弹窗）：登录态已在「登录 QQ 网页」时保存；登录过期会返回明确错误
+        const settings = readSettings()
         const file = await downloadLinkedFile({
           url,
           parent: window,
           accountId: record.accountId,
           messageId,
+          background: {
+            dest: join(app.getPath('temp'), 'mailharbor', `qq-link-${messageId}.part`),
+            timeoutMs: Math.max(60, Number(settings.downloadTimeoutSec) || 900) * 1000
+          },
+          connections: Math.max(2, Math.min(32, Number(settings.downloadConnections) || 8)),
+          isPaused: () => downloadControl.isPaused(messageId),
+          isCancelled: () => downloadControl.isCancelled(messageId),
           onProgress: (progress) => context.broadcast({ type: 'download:progress', progress })
         })
         if (!file) return { ok: false, message: '已取消' }

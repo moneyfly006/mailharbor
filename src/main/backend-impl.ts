@@ -11,6 +11,7 @@ import type { Backend } from './services'
 import type { MainEvent } from '@shared/types'
 import { qqFileLink } from './qq-web'
 import { downloadLinkedFile } from './link-download'
+import { downloadControl } from './download-control'
 
 export function createBackendImpl(ctx: { bus: EventEmitter }): Backend {
   const db = openDb()
@@ -44,6 +45,8 @@ export function createBackendImpl(ctx: { bus: EventEmitter }): Backend {
           messageId,
           url,
           connections: Math.max(2, Math.min(32, Number(getSetting<number>('downloadConnections')) || 8)),
+          isPaused: () => downloadControl.isPaused(messageId),
+          isCancelled: () => downloadControl.isCancelled(messageId),
           background: { dest, timeoutMs: Math.max(60, Number(getSetting('downloadTimeoutSec')) || 900) * 1000 },
           onProgress: (progress) => ctx.bus.emit('event', { type: 'download:progress', progress } satisfies MainEvent)
         })

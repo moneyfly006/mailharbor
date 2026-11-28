@@ -25,6 +25,12 @@ export interface Backend {
     /** 最近一次检查完成时间 */
     lastCheckAt(): number | null
   }
+  /** 下载控制：暂停 / 继续 / 取消（HTTP 大文件下载支持） */
+  downloads: {
+    pause(messageId: number): void
+    resume(messageId: number): void
+    cancel(messageId: number): void
+  }
   /** Gmail API 加速（授权状态 / 授权 / 撤销 / 连通性测试） */
   gmail: {
     status(): Array<{ accountId: number; email: string; provider: string; expiry: number | null; daysLeft: number | null; needsReauth: boolean; lastError: string | null }>

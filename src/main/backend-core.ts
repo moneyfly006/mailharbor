@@ -24,6 +24,7 @@ import {
 import { testSmtpConnection } from './smtp'
 import { GmailApiClient } from './gmail/client'
 import { DriveDownloader, extractDriveFileIds } from './gmail/drive'
+import { downloadControl } from './download-control'
 import { startGmailAuth } from './gmail/oauth'
 import { resolveProxy } from './net/proxy'
 import type { TestResultLine } from '@shared/types'
@@ -260,11 +261,17 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       if (!client) return { ok: false, message: 'Gmail 尚未授权；请到「邮箱账户」页点「重新授权」（需包含 Drive 只读权限）' }
       const ids = extractDriveFileIds(links)
       const files: string[] = []
+      downloadControl.begin(messageId)
       for (const [index, id] of ids.entries()) {
         const dest = join(deps.tmpDir, `drive-${messageId}-${index}.part`)
         try {
           const conns = Math.max(2, Math.min(32, Number(deps.getSetting<number>('downloadConnections') ?? 8)))
-          const r = await client.downloadParallel(id, dest, { connections: conns, chunkBytes: Math.floor(64 * 1024 * 1024 / conns), onProgress: (received, total) => {
+          const r = await client.downloadParallel(id, dest, {
+            connections: conns,
+            chunkBytes: Math.floor(64 * 1024 * 1024 / conns),
+            isPaused: () => downloadControl.isPaused(messageId),
+            isCancelled: () => downloadControl.isCancelled(messageId),
+            onProgress: (received, total) => {
             emit({
               type: 'download:progress',
               progress: {
@@ -300,6 +307,8 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
           })
         } catch (e) {
           const m = e instanceof Error ? e.message : String(e)
+          downloadControl.clear(messageId)
+          if (/取消/.test(m)) return { ok: false, message: '已取消下载' }
           emit({ type: 'download:progress', progress: { messageId, attachmentId: -(messageId * 100 + index), filename: `Google Drive 文件 ${index + 1}`, received: 0, total: 0, percent: null, state: 'failed', attempt: 1, bytesPerSec: 0, message: m, updatedAt: Date.now() } })
           return { ok: false, message: `Drive 下载失败：${m}` }
         }
@@ -307,6 +316,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       if (files.length === 0) return { ok: false, message: '没有可下载的 Drive 文件' }
       if (!archiveManualRef) return { ok: false, message: '归档服务未就绪' }
       const res = await archiveManualRef(messageId, files)
+      downloadControl.clear(messageId)
       return { ok: res.ok, files: files.length, message: res.message }
     }
   }
@@ -670,6 +680,11 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
           ? { ...g, message: 'Gmail + Drive（超大附件）均正常' }
           : { ...g, message: `Gmail 正常；Drive：${d.message ?? '不可用'}` }
       }
+    },
+    downloads: {
+      pause: (messageId: number) => downloadControl.pause(messageId),
+      resume: (messageId: number) => downloadControl.resume(messageId),
+      cancel: (messageId: number) => downloadControl.cancel(messageId)
     },
     async testAccount(input: AccountInput): Promise<TestResult> {
       if (!input?.password) return failedTest('请填写应用专用密码 / 授权码后再测试连接', 'imap', input)

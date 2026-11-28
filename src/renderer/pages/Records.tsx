@@ -238,6 +238,7 @@ export function Records(): JSX.Element {
   )
   const doneCount = rows.filter((r) => r.status === 'done').length
   const [bulkRetryingPaths, setBulkRetryingPaths] = useState(false)
+  const [pausedIds, setPausedIds] = useState<Set<number>>(new Set())
 
   const retryAllFailedPaths = async (): Promise<void> => {
     const targets: Array<{ messageId: number; deliveryId: number }> = []
@@ -550,6 +551,37 @@ export function Records(): JSX.Element {
         <section className="dl-progress" aria-label="附件下载进度">
           {downloads.map((d) => (
             <div className="dlp-item" key={d.attachmentId}>
+              <div className="dlp-actions">
+                <button
+                  type="button"
+                  className="dlp-btn"
+                  onClick={() => {
+                    const paused = !pausedIds.has(d.messageId)
+                    setPausedIds((prev) => {
+                      const next = new Set(prev)
+                      if (paused) next.add(d.messageId)
+                      else next.delete(d.messageId)
+                      return next
+                    })
+                    void (paused ? api.downloads.pause(d.messageId) : api.downloads.resume(d.messageId))
+                  }}
+                >
+                  {pausedIds.has(d.messageId) ? '继续' : '暂停'}
+                </button>
+                <button type="button" className="dlp-btn" onClick={() => void api.downloads.cancel(d.messageId)}>
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="dlp-btn"
+                  onClick={() => {
+                    void api.records.retryDownload(d.messageId)
+                    reload()
+                  }}
+                >
+                  重试
+                </button>
+              </div>
               <div className="dlp-head">
                 <Icon name="download" size={13} />
                 <span className="dlp-name" title={d.filename}>{d.filename}</span>

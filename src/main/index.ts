@@ -217,8 +217,8 @@ function registerAppEvents(): void {
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: 1600,
+    height: 1000,
     minWidth: 1280,
     minHeight: 780,
     show: false,

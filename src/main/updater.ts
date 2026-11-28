@@ -85,24 +85,34 @@ export function createUpdater(opts: {
     promptedDownloaded = true
     const w = opts.window()
     if (!w) {
-      // 没有窗口时直接静默安装（下次退出时也会自动安装）
+      autoUpdater.quitAndInstall(false, true)
       return
     }
+    // 用户要求：下载完成自动安装并重启。这里给 5 秒倒计时，仍可点「稍后」取消。
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      autoUpdater.quitAndInstall(false, true)
+    }, 5000)
     void dialog
       .showMessageBox(w, {
         type: 'info',
         title: '更新已下载',
         message: `新版本 v${version} 已下载完成`,
-        detail: '点击「立即重启」会关闭软件并安装新版本；点「稍后」则在你下次退出时自动安装。',
+        detail: '5 秒后自动重启并安装新版本；点「稍后」则在你下次退出时安装。',
         buttons: ['立即重启', '稍后'],
         defaultId: 0,
         cancelId: 1,
         noLink: true
       })
       .then(({ response }) => {
+        cancelled = true
+        clearTimeout(timer)
         if (response === 0) autoUpdater.quitAndInstall(false, true)
       })
-      .catch(() => {})
+      .catch(() => {
+        /* 弹窗失败也继续自动安装 */
+      })
   }
 
   autoUpdater.on('checking-for-update', () => setState({ status: 'checking', message: '正在检查更新…' }))

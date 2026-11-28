@@ -25,6 +25,8 @@ export async function downloadLinkedFile(options: {
   background?: { dest: string; timeoutMs: number }
   /** 多线程分段下载连接数（2–32），用于 QQ 中转站 CDN 加速 */
   connections?: number
+  isPaused?: () => boolean
+  isCancelled?: () => boolean
   onProgress: (progress: DownloadProgress) => void
 }): Promise<{ path: string; filename: string } | null> {
   const url = httpsUrl(options.url)
@@ -225,6 +227,8 @@ export async function downloadLinkedFile(options: {
               url: realUrl,
               cookies: cookieHeader,
               dest: savePath,
+              isPaused: options.isPaused,
+              isCancelled: options.isCancelled,
               connections: Math.max(2, Math.min(32, options.connections ?? 8)),
               onProgress: (received, total) => {
                 options.onProgress({
@@ -381,6 +385,8 @@ async function rangeDownload(opts: {
   cookies: string
   dest: string
   connections: number
+  isPaused?: () => boolean
+  isCancelled?: () => boolean
   onProgress: (received: number, total: number) => void
 }): Promise<boolean> {
   const https = await import('node:https')
@@ -443,6 +449,11 @@ async function rangeDownload(opts: {
         const idx = next++
         const range = ranges[idx]
         if (!range) return
+        while (opts.isPaused?.()) {
+          if (opts.isCancelled?.()) throw new Error('下载已取消')
+          await new Promise((r) => setTimeout(r, 400))
+        }
+        if (opts.isCancelled?.()) throw new Error('下载已取消')
         const [start, end] = range
         const res = await request(`bytes=${start}-${end}`)
         if (res.statusCode !== 206) {

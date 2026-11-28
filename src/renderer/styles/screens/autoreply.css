@@ -39,7 +39,7 @@
 }
 
 .ar-switch-row .d {
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--color-text-tertiary);
   margin-top: 3px;
 }
@@ -65,7 +65,7 @@
 }
 
 .ar-stats .k {
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--color-text-quaternary);
   letter-spacing: 0.04em;
 }
@@ -107,7 +107,7 @@
 
 .tpl-hd .note {
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   white-space: nowrap;
 }
@@ -133,7 +133,7 @@
   border: 1px solid var(--color-rule);
   border-radius: var(--radius-sm);
   background: var(--paper-200);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
 }
 
@@ -161,7 +161,7 @@
 }
 
 .subject-row .lab {
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--color-text-tertiary);
   width: 44px;
   flex: none;
@@ -228,7 +228,7 @@
 }
 
 .var-bar .k {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   margin-right: 2px;
   flex: none;
@@ -244,7 +244,7 @@
   border-radius: var(--radius-sm);
   background: var(--paper-050);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--ink-600);
   white-space: nowrap;
   flex: none;
@@ -252,7 +252,7 @@
 
 .var-btn .plus {
   color: var(--ink-400);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .var-btn:hover {
@@ -267,7 +267,7 @@
 }
 
 .var-hint {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   margin-left: auto;
   overflow: hidden;
@@ -285,7 +285,7 @@
 }
 
 .tpl-note {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
 }
 
@@ -318,12 +318,12 @@
 }
 
 .send-item .lbl {
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--color-text-secondary);
 }
 
 .send-item .sub {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   margin-top: 1px;
   line-height: 1.45;
@@ -338,7 +338,7 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-quaternary);
 }
 
@@ -360,7 +360,7 @@
 }
 
 .test-row .mono {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
 }
 
@@ -392,7 +392,7 @@
 .pv-hd .note {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
 }
 
@@ -409,7 +409,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   padding-bottom: 8px;
   min-width: 0;
@@ -422,7 +422,7 @@
 
 .pv-context .link {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   flex: none;
 }
 
@@ -461,7 +461,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 10.8px;
+  font-size: 12.8px;
   color: #6c7681;
 }
 
@@ -481,12 +481,12 @@
 
 .mail-meta .v.mono {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 
 .mail-lag {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   color: #8b939c;
   flex: none;
 }
@@ -500,7 +500,7 @@
 .mail-body {
   padding: 11px 16px 12px;
   font-family: var(--type-body);
-  font-size: 12.8px;
+  font-size: 14.8px;
   line-height: 1.7;
   color: #222c38;
   flex: 1;
@@ -519,12 +519,12 @@
   background: #f6f4ee;
   border: 1px solid rgba(22, 32, 43, 0.09);
   border-radius: 4px;
-  font-size: 11.5px;
+  font-size: 13.5px;
   line-height: 1.7;
 }
 
 .mail-body .files .ft {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   color: #7c858f;
   text-transform: uppercase;
@@ -539,7 +539,7 @@
 
 .mail-body .files .fname {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: #222c38;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -549,7 +549,7 @@
 .mail-body .files .fsize {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: #7c858f;
   flex: none;
 }
@@ -562,14 +562,14 @@
 
 .mail-body .orig-h {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   letter-spacing: 0.04em;
   color: #9aa1a9;
   margin-bottom: 4px;
 }
 
 .mail-body .orig-l {
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.65;
   color: #7c858f;
   white-space: pre-wrap;
@@ -589,7 +589,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 12px;
   color: #7c858f;
   flex: none;
 }
@@ -601,7 +601,7 @@
   align-items: center;
   gap: 8px;
   flex: none;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
 }
 
@@ -614,7 +614,7 @@
   border-radius: var(--radius-sm);
   background: var(--color-info-bg);
   border: 1px solid var(--color-info-border);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--slate-700);
   flex: none;
@@ -681,7 +681,7 @@
 }
 .send-item .factory-field input {
   height: 28px;
-  font-size: 11.5px;
+  font-size: 13.5px;
 }
 @media (max-width: 1400px) {
   .send-item .factory-field { width: 180px; }
@@ -690,7 +690,7 @@
 /* 回信发件账户下拉 */
 .reply-from-select {
   height: 28px;
-  font-size: 11.5px;
+  font-size: 13.5px;
   border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.12));
   border-radius: var(--radius-sm, 4px);
   background: var(--paper-000, #FDFBF6);

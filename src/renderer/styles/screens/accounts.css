@@ -36,7 +36,7 @@
 
 .sec-row .cnt {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
 }
 
@@ -132,7 +132,7 @@
 }
 
 .acct-meta {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-quaternary);
   margin-top: 3px;
   white-space: nowrap;
@@ -150,7 +150,7 @@
 .acct-actions .btn {
   height: 26px;
   padding: 0 8px;
-  font-size: 11.5px;
+  font-size: 13.5px;
   gap: 4px;
 }
 
@@ -178,7 +178,7 @@
   border-radius: var(--radius-xs);
   background: var(--paper-200);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--ink-600);
   white-space: nowrap;
 }
@@ -199,7 +199,7 @@
 
 .srv-error-time {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-danger-strong);
 }
 
@@ -225,7 +225,7 @@
 }
 
 .acct-stats .k {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -233,7 +233,7 @@
 
 .acct-stats .v {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--ink-700);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
@@ -259,7 +259,7 @@
   border-radius: var(--radius-sm);
   background: var(--color-danger-bg);
   border: 1px solid var(--color-danger-border);
-  font-size: 11.5px;
+  font-size: 13.5px;
   line-height: 1.55;
   color: var(--color-danger-strong);
   display: flex;
@@ -328,7 +328,7 @@
 }
 
 .mini-card .m-t {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--ink-800);
   font-weight: 500;
   display: flex;
@@ -337,7 +337,7 @@
 }
 
 .mini-card .m-d {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   margin-top: 2px;
   line-height: 1.45;
@@ -382,7 +382,7 @@
 
 .faq-hd .note {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
 }
 
@@ -401,20 +401,20 @@
 }
 
 .faq-item .q {
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--ink-800);
   font-weight: 500;
 }
 
 .faq-item .a {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
   line-height: 1.55;
   margin-top: 1px;
 }
 
 .faq-item .a .mono {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--ink-600);
 }
 
@@ -444,7 +444,7 @@
 }
 
 .fm-hd .sub {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
   margin-top: 3px;
   line-height: 1.5;
@@ -472,7 +472,7 @@
 }
 
 .preset-row .lbl {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
   flex: none;
 }
@@ -496,7 +496,7 @@
   justify-content: center;
   gap: 4px;
   border-radius: var(--radius-sm);
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-tertiary);
   white-space: nowrap;
   border: 1px solid transparent;
@@ -526,13 +526,13 @@
   display: flex;
   align-items: flex-start;
   gap: 5px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   line-height: 1.5;
 }
 
 .preset-hint .mono {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-600);
 }
 
@@ -550,7 +550,7 @@
   border: 1px solid var(--color-warning-border);
   background: var(--color-warning-bg);
   border-radius: var(--radius-sm);
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.5;
   color: var(--color-warning-strong);
 }
@@ -582,12 +582,12 @@
 
 .srv-block-hd .idx {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-400);
 }
 
 .srv-block-hd .t {
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 600;
   color: var(--ink-900);
   letter-spacing: 0.02em;
@@ -595,7 +595,7 @@
 
 .srv-block-hd .role {
   font-family: var(--font-latin);
-  font-size: 8.5px;
+  font-size: 10.5px;
   letter-spacing: 0.1em;
   color: var(--color-text-quaternary);
   text-transform: uppercase;
@@ -628,19 +628,19 @@
 }
 
 .fm-row .label {
-  font-size: 11px;
+  font-size: 13px;
   margin-bottom: 0;
 }
 
 .fm-row .input {
   height: 27px;
-  font-size: 12px;
+  font-size: 14px;
   padding: 0 8px;
 }
 
 .fm-row .input .input-el {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 13.5px;
   letter-spacing: 0;
 }
 
@@ -650,7 +650,7 @@
 }
 
 .fm-row .hint {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .enc-seg {
@@ -669,7 +669,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: 2px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
   white-space: nowrap;
   border: 0;
@@ -692,14 +692,14 @@
 }
 
 .fm-inline-hint {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   line-height: 1.45;
   padding-bottom: 3px;
 }
 
 .fm-hint {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   line-height: 1.5;
   display: flex;
@@ -722,7 +722,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-tertiary);
   white-space: nowrap;
 }
@@ -745,14 +745,14 @@
 }
 
 .test-title {
-  font-size: 11.5px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--ink-900);
 }
 
 .test-title .mono {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--color-text-quaternary);
   font-weight: 400;
 }
@@ -765,14 +765,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--ink-700);
   min-width: 0;
 }
 
 .test-line .tag {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--ink-500);
   border: 1px solid var(--color-rule);
   background: var(--paper-000);
@@ -803,20 +803,20 @@
 
 .test-line .ms {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--color-text-quaternary);
   margin-left: auto;
   flex: none;
 }
 
 .test-note {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   line-height: 1.5;
 }
 
 .test-note .mono {
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--ink-600);
 }
 
@@ -834,7 +834,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
 }
 
@@ -857,11 +857,11 @@
 
   .acct-actions .btn {
     padding: 0 7px;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .acct-stats .v {
-    font-size: 11.5px;
+    font-size: 13.5px;
   }
 }
 
@@ -932,7 +932,7 @@
 
 .proxy-state {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-accent-text, #A83321);
   border: 1px solid var(--color-accent-border, rgba(200, 66, 45, 0.32));
   background: rgba(200, 66, 45, 0.05);
@@ -941,7 +941,7 @@
 }
 
 .proxy-hint {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -950,7 +950,7 @@
 
 .proxy-toggle {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
 }
 
@@ -992,7 +992,7 @@
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: 13.5px;
   line-height: 1.6;
   padding: 6px 9px;
   border-radius: 4px;
@@ -1009,7 +1009,7 @@
 }
 
 .proxy-note {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: var(--color-text-quaternary);
   line-height: 1.6;
 }
@@ -1024,12 +1024,12 @@
 }
 
 .sendonly-row .lbl {
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--color-text-secondary);
 }
 
 .sendonly-row .sub {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-text-quaternary);
   line-height: 1.55;
   margin-top: 1px;
