@@ -508,6 +508,9 @@ export class MailPipeline {
         this.deps.tmpDir,
         `${account.id}-${account.uidValidity ?? 'na'}-${msg.uid}-${safePart}.part`
       )
+      this.log.info(
+        `开始下载附件：${part.filename}（${part.size ? Math.round(Number(part.size) / 1024) + 'KB' : '未知大小'}，账户 ${account.email}）`
+      )
       // 弱网/大附件：自动重试若干次（每次重新发 FETCH，进度从 0 开始）
       const maxAttempts = Math.max(1, Number(this.setting<number>('downloadAttempts') ?? 3))
       const timeoutMs = Math.max(60, Number(this.setting<number>('downloadTimeoutSec') ?? 900)) * 1000

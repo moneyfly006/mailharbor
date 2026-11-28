@@ -30,6 +30,8 @@ import { resolveProxy } from './net/proxy'
 import type { TestResultLine } from '@shared/types'
 import { sendReply as smtpSendReply, buildReplyVars, renderTemplate, type ReplyRequest, type SendReplyResult } from './smtp'
 import { createLogger, setLogLevel } from './log'
+
+const archiveLog = createLogger('archive')
 import { stat } from 'node:fs/promises'
 import type { Backend } from './services'
 import { matchRules, normalize, stripSubjectPrefix } from './rule-engine'
@@ -906,6 +908,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
           /* ignore */
         }
       }
+      archiveLog.info(`开始归档 #${messageId}：${files.length} 个文件 → ${targets.map((x) => x.path).join('、')}`)
       phase(`正在复制到目标文件夹（${files.length} 个文件）…`)
       for (const file of files) {
         try {
@@ -921,6 +924,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
           for (const target of targets) {
             try {
               const copied = await copyIntoDir(file, target.path, name)
+              archiveLog.info(`已复制 ${name} → ${copied.savedPath}`)
               const [delivery] = repos.createDeliveries([
                 { messageId, attachmentId: att.id, targetId: target.id, targetPath: target.path, required: target.required }
               ])
@@ -935,10 +939,14 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
               archived++
               if (extract && isArchiveFile(name)) {
                 try {
+                  archiveLog.info(`开始解压：${name}`)
                   const res = await extractArchiveTo(copied.savedPath, dirname(copied.savedPath))
                   extracted += res?.extracted ?? 0
+                  archiveLog.info(`解压完成：${name} → ${res?.extracted ?? 0} 个文件${res?.skipped ? `，跳过 ${res.skipped}` : ''}`)
                 } catch (e) {
-                  errors.push(`${name} 解压失败：${e instanceof Error ? e.message : String(e)}`)
+                  const m = e instanceof Error ? e.message : String(e)
+                  errors.push(`${name} 解压失败：${m}`)
+                  archiveLog.warn(`解压失败：${name}：${m}`)
                 }
               }
             } catch (e) {
@@ -950,6 +958,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         }
       }
       if (archived > 0) {
+        archiveLog.info(`归档完成 #${messageId}：${archived} 个文件，解压 ${extracted} 个${errors.length ? `；错误：${errors.slice(0, 3).join('；')}` : ''}`)
         phase('已完成归档，正在回信…')
         repos.updateMessageStatus(messageId, archived > 0 ? 'done' : 'failed', errors.length ? errors.join('；') : null)
         repos.updateMessageReplyStatus(messageId, 'pending', null)
@@ -999,6 +1008,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
             'failed',
             '上次下载被中断（软件关闭或网络断开）。可点行内「重试下载」重新拉取'
           )
+          archiveLog.warn(`恢复卡住任务 #${m.id}「${(m.subject || '').slice(0, 30)}」→ 失败可重试`)
         }
         if (stuck.length > 0) console.log(`[backend] 恢复 ${stuck.length} 封卡在「处理中」的邮件 → 可重试`)
       } catch {
