@@ -46,6 +46,7 @@ const api: Api = {
     retry: (messageId, deliveryId) => invoke(IPC.recordsRetry, messageId, deliveryId),
     retryDownload: (messageId) => invoke(IPC.recordsRetryDownload, messageId),
     reprocess: (messageId) => invoke(IPC.recordsReprocess, messageId),
+    delete: (messageId) => invoke(IPC.recordsDelete, messageId),
     openLink: (messageId) => invoke(IPC.recordsOpenLink, messageId),
     downloadLink: (messageId) => invoke(IPC.recordsDownloadLink, messageId),
     archiveManual: (messageId) => invoke(IPC.recordsArchiveManual, messageId),

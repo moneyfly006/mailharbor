@@ -12,6 +12,7 @@ import { SegmentedControl } from '../components/SegmentedControl'
 import { Select } from '../components/TextField'
 import { StatusBadge } from '../components/StatusBadge'
 import { aggregateDeliveries } from '../lib/delivery'
+import { ConfirmDialog } from '../components/Modal'
 import {
   cls, driveOf, errMsg, fmtBytes, fmtDateTime, fmtNumber, mailLocal
 } from '../lib/format'
@@ -239,6 +240,8 @@ export function Records(): JSX.Element {
   const doneCount = rows.filter((r) => r.status === 'done').length
   const [bulkRetryingPaths, setBulkRetryingPaths] = useState(false)
   const [pausedIds, setPausedIds] = useState<Set<number>>(new Set())
+  const [deleteTarget, setDeleteTarget] = useState<RecordRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const retryAllFailedPaths = async (): Promise<void> => {
     const targets: Array<{ messageId: number; deliveryId: number }> = []
@@ -1000,6 +1003,15 @@ export function Records(): JSX.Element {
                               <Icon name="eye" size={13} />
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label="删除这条记录"
+                            title="删除记录（不会删除已归档到文件夹里的文件）"
+                            onClick={() => setDeleteTarget(row)}
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1076,6 +1088,32 @@ export function Records(): JSX.Element {
           </div>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={deleteTarget != null}
+        title="删除这条下载记录？"
+        subtitle={`「${deleteTarget?.subject ?? ''}」`}
+        detail="记录、附件状态、投递与回信记录都会删除；已归档到文件夹里的文件不受影响。"
+        confirmText="删除记录"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return
+          setDeleting(true)
+          void api.records
+            .delete(deleteTarget.id)
+            .then((r) => {
+              if (r.ok) {
+                pushToast('success', '已删除记录', '文件夹里的文件没有动')
+                setDeleteTarget(null)
+                reload()
+                refreshDashboard()
+              } else pushToast('warn', '删除失败', r.message ?? '请重试')
+            })
+            .catch((e) => pushToast('error', '删除失败', errMsg(e)))
+            .finally(() => setDeleting(false))
+        }}
+      />
     </>
   )
 }

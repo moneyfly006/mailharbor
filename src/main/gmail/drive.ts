@@ -155,14 +155,27 @@ export class DriveDownloader {
           }
           if (opts.isCancelled?.()) throw new Error('下载已取消')
           const [start, end] = seg
-          const res = await httpsRequest(
-            `${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
-            {
-              headers: { Authorization: `Bearer ${token}`, Range: `bytes=${start}-${end}` },
-              proxy: this.opts.proxy ?? null,
-              timeoutMs: 10 * 60_000
+          // 单块 60 秒超时 + 最多 3 次重试：避免「最后 1%」因为一块卡住而长时间停住
+          let res: Awaited<ReturnType<typeof httpsRequest>> | null = null
+          let lastErr: Error | null = null
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              res = await httpsRequest(
+                `${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+                {
+                  headers: { Authorization: `Bearer ${token}`, Range: `bytes=${start}-${end}` },
+                  proxy: this.opts.proxy ?? null,
+                  timeoutMs: 60_000
+                }
+              )
+              break
+            } catch (e) {
+              lastErr = e instanceof Error ? e : new Error(String(e))
+              if (opts.isCancelled?.()) throw new Error('下载已取消')
+              await new Promise((r) => setTimeout(r, 1000))
             }
-          )
+          }
+          if (!res) throw lastErr ?? new Error('分段请求失败')
           const status = res.statusCode ?? 0
           if (status !== 206) {
             // 服务器不支持 Range：丢掉这次下载，回退单线程

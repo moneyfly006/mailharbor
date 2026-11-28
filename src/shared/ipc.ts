@@ -27,6 +27,7 @@ export const IPC = {
   recordsRetry: 'records:retry',
   recordsRetryDownload: 'records:retry-download',
   recordsReprocess: 'records:reprocess',
+  recordsDelete: 'records:delete',
   rulesTestSubject: 'rules:test-subject',
   gmailStatus: 'gmail:status',
   gmailAuthStart: 'gmail:auth-start',
@@ -110,6 +111,7 @@ export interface Api {
     retryDownload(messageId: number): Promise<{ ok: boolean; message?: string }>
     /** 重新识别（用于修改规则/升级后重扫单封邮件） */
     reprocess(messageId: number): Promise<{ ok: boolean; message?: string }>
+    delete(messageId: number): Promise<{ ok: boolean; message?: string }>
     /** 用系统浏览器打开超大附件/网盘链接 */
     openLink(messageId: number): Promise<{ ok: boolean; message?: string }>
     /** 在应用内打开下载页，取得实际网页文件后归档 */

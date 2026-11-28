@@ -362,6 +362,19 @@ export function registerIpc(context: IpcContext): void {
     }
   })
 
+  ipcMain.handle(IPC.recordsDelete, async (_e, messageId: number) => {
+    if (!Number.isSafeInteger(messageId) || messageId <= 0) return { ok: false, message: '无效的邮件记录' }
+    try {
+      // 正在下载的先取消
+      requireBackend().downloads.cancel(messageId)
+      const ok = repos.deleteMessageRecord(messageId)
+      ctx?.broadcast({ type: 'dashboard:changed' })
+      return { ok, message: ok ? undefined : '找不到这条记录' }
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
   ipcMain.handle(IPC.recordsOpenFolder, async (_e, messageId: number, deliveryId?: number): Promise<void> => {
     const dir = repos.folderOfRecord(messageId, deliveryId)
     if (!dir) throw new Error('没有可打开的文件夹')

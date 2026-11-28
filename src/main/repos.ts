@@ -1868,6 +1868,20 @@ export function clearMessages(): void {
   db().prepare('DELETE FROM messages').run()
 }
 
+/** 删除单条邮件记录及其附件、投递、回信记录（不删除已归档的文件） */
+export function deleteMessageRecord(messageId: number): boolean {
+  const d = db()
+  const row = d.prepare('SELECT id FROM messages WHERE id=?').get(messageId)
+  if (!row) return false
+  d.transaction(() => {
+    d.prepare('DELETE FROM deliveries WHERE message_id=?').run(messageId)
+    d.prepare('DELETE FROM attachments WHERE message_id=?').run(messageId)
+    d.prepare('DELETE FROM auto_replies WHERE message_id=?').run(messageId)
+    d.prepare('DELETE FROM messages WHERE id=?').run(messageId)
+  })()
+  return true
+}
+
 export function countMessages(): number {
   return (db().prepare('SELECT COUNT(*) AS c FROM messages').get() as { c: number }).c
 }

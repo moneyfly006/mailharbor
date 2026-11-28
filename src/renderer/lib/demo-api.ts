@@ -431,6 +431,11 @@ export function createDemoApi(): Api {
       rec.status = 'done'
       return { ok: true, archived: 2 }
     },
+    delete: async (messageId: number) => {
+      await delay(200)
+      state.records = state.records.filter((r) => r.id !== messageId)
+      return { ok: true }
+    },
     reprocess: async (messageId: number) => {
       await delay(700)
       const rec = state.records.find((r) => r.id === messageId)
