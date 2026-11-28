@@ -31,6 +31,7 @@ export const IPC = {
   gmailStatus: 'gmail:status',
   gmailAuthStart: 'gmail:auth-start',
   gmailReauthorize: 'gmail:reauthorize',
+  gmailFetchDrive: 'gmail:fetch-drive',
   gmailRevoke: 'gmail:revoke',
   gmailTest: 'gmail:test',
   recordsOpenLink: 'records:open-link',
@@ -90,6 +91,7 @@ export interface Api {
     status(): Promise<Array<{ accountId: number; email: string; provider: string; expiry: number | null; daysLeft: number | null; needsReauth: boolean; lastError: string | null }>>
     startAuth(accountId: number, clientId: string, clientSecret: string): Promise<{ authUrl: string }>
     reauthorize(accountId: number): Promise<{ authUrl: string }>
+    fetchDriveAndArchive(messageId: number): Promise<{ ok: boolean; files?: number; message?: string; archived?: number; extracted?: number }>
     revoke(accountId: number): Promise<void>
     test(accountId: number): Promise<{ ok: boolean; email?: string; message?: string }>
   }

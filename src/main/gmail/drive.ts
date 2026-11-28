@@ -5,6 +5,7 @@
  * 下载走 HTTPS（alt=media），流式写盘，400MB 也不占内存。
  */
 import { createWriteStream, existsSync, renameSync, rmSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { sanitizeFilename } from '../file-writer'
 import { pipeline } from 'node:stream/promises'
@@ -104,6 +105,116 @@ export class DriveDownloader {
     if (status >= 400) throw new Error(`读取 Drive 文件信息失败：HTTP ${status} ${text.slice(0, 160)}`)
     const json = JSON.parse(text) as { name?: string; size?: string; mimeType?: string }
     return { name: json.name ?? 'drive-file', size: Number(json.size ?? 0), mimeType: json.mimeType ?? '' }
+  }
+
+  /**
+   * 多线程分段下载（HTTP Range）。
+   * Drive 的 alt=media 通常支持 Range：切成 N 段并发拉取，速度可提升 2–3 倍。
+   * 若服务器忽略 Range（返回 200 全量），自动回退单线程，避免下错文件。
+   */
+  async downloadParallel(
+    fileId: string,
+    destPath: string,
+    opts: { connections?: number; chunkBytes?: number; onProgress?: (received: number, total: number) => void } = {}
+  ): Promise<DriveDownloadResult> {
+    const t0 = Date.now()
+    const token = await this.token()
+    const info = await this.meta(fileId).catch(() => ({ name: 'drive-file', size: 0, mimeType: '' }))
+    const total = Number(info.size) || 0
+    const conns = Math.max(2, Math.min(8, opts.connections ?? 4))
+    const chunk = Math.max(1 * 1024 * 1024, Math.min(16 * 1024 * 1024, opts.chunkBytes ?? 8 * 1024 * 1024))
+    if (total <= 0 || total <= chunk * 2) return this.download(fileId, destPath, opts.onProgress)
+
+    const fh = await (await import('node:fs/promises')).open(destPath, 'w')
+    try {
+      await fh.truncate(total)
+      const offsets: Array<[number, number]> = []
+      for (let start = 0; start < total; start += chunk) {
+        offsets.push([start, Math.min(start + chunk, total) - 1])
+      }
+      let received = 0
+      let lastReport = 0
+      let nextIndex = 0
+      let rangeSupported = true
+      const workers = Array.from({ length: Math.min(conns, offsets.length) }, async () => {
+        for (;;) {
+          const idx = nextIndex++
+          const seg = offsets[idx]
+          if (!seg) return
+          const [start, end] = seg
+          const res = await httpsRequest(
+            `${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+            {
+              headers: { Authorization: `Bearer ${token}`, Range: `bytes=${start}-${end}` },
+              proxy: this.opts.proxy ?? null,
+              timeoutMs: 10 * 60_000
+            }
+          )
+          const status = res.statusCode ?? 0
+          if (status !== 206) {
+            // 服务器不支持 Range：丢掉这次下载，回退单线程
+            res.resume()
+            rangeSupported = false
+            throw new Error('Drive 服务器不支持分段下载')
+          }
+          const expected = end - start + 1
+          let written = 0
+          const chunks: Buffer[] = []
+          for await (const c of res) {
+            const b = Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array)
+            chunks.push(b)
+            written += b.length
+          }
+          if (written !== expected) throw new Error(`分段大小不符：收到 ${written}，期望 ${expected}`)
+          await fh.write(Buffer.concat(chunks), 0, written, start)
+          received += written
+          const now = Date.now()
+          if (now - lastReport > 400) {
+            lastReport = now
+            try {
+              opts.onProgress?.(received, total)
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      })
+      try {
+        await Promise.all(workers)
+      } catch (e) {
+        if (!rangeSupported) {
+          await fh.close().catch(() => {})
+          await rm(destPath, { force: true }).catch(() => {})
+          return this.download(fileId, destPath, opts.onProgress)
+        }
+        throw e
+      }
+      try {
+        opts.onProgress?.(total, total)
+      } catch {
+        /* ignore */
+      }
+      console.log(
+        `[drive-parallel] ${info.name} ${(total / 1048576).toFixed(1)}MB / ${((Date.now() - t0) / 1000).toFixed(1)}s · ${conns} 连接 · ${(total / 1048576 / ((Date.now() - t0) / 1000)).toFixed(2)} MB/s`
+      )
+      // 改回真实文件名（与单线程一致，保证后续识别为压缩包并解压）
+      const { basename, dirname, join } = await import('node:path')
+      const { sanitizeFilename } = await import('../file-writer')
+      let finalPath = destPath
+      if (info.name && info.name !== basename(destPath)) {
+        try {
+          const real = join(dirname(destPath), sanitizeFilename(info.name, 'drive-file'))
+          if (existsSync(real)) rmSync(real, { force: true })
+          renameSync(destPath, real)
+          finalPath = real
+        } catch {
+          /* ignore */
+        }
+      }
+      return { path: finalPath, filename: info.name, size: total, sha256: '' }
+    } finally {
+      await fh.close().catch(() => {})
+    }
   }
 
   /** 下载到指定路径（流式） */

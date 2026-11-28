@@ -232,6 +232,12 @@ export function registerIpc(context: IpcContext): void {
 
   ipcMain.handle(IPC.gmailTest, (_e, accountId: number) => requireBackend().gmail.test(Number(accountId)))
 
+  ipcMain.handle(IPC.gmailFetchDrive, async (_e, messageId: number) => {
+    const r = await requireBackend().gmail.fetchDriveAndArchive(Number(messageId))
+    ctx?.broadcast({ type: 'dashboard:changed' })
+    return r
+  })
+
   ipcMain.handle(IPC.rulesTestSubject, async (_e, subject: string, body?: string) => {
     return requireBackend().testSubject(String(subject ?? ''), body)
   })
