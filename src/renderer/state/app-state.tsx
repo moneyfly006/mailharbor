@@ -18,6 +18,13 @@ function pageFromHash(): Page | null {
   return (PAGE_KEYS as string[]).includes(raw) ? (raw as Page) : null
 }
 
+export interface LiveLogItem {
+  id: number
+  at: number
+  level: 'info' | 'success' | 'warn' | 'error'
+  text: string
+}
+
 interface AppContextValue {
   api: Api
   demo: boolean
@@ -33,6 +40,9 @@ interface AppContextValue {
   toasts: ToastItem[]
   /** 正在下载的附件（大附件/弱网时给用户看进度） */
   downloads: DownloadProgress[]
+  /** 实时日志（下载/归档/收信/回信/错误），下载记录页底部展示 */
+  liveLogs: LiveLogItem[]
+  clearLogs: () => void
   /** 手动重试「下载失败」的邮件 */
   retryDownload: (messageId: number) => Promise<void>
   pushToast: (level: ToastLevel, title: string, body?: string) => void
@@ -52,9 +62,28 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const [rulesCount, setRulesCount] = useState(0)
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [downloads, setDownloads] = useState<DownloadProgress[]>([])
+  const [liveLogs, setLiveLogs] = useState<LiveLogItem[]>([])
+  const logSeq = useRef(0)
+  const lastLogKey = useRef('')
+  const progressLogAt = useRef<Map<number, { pct: number; message: string }>>(new Map())
   const downloadTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const toastSeq = useRef(0)
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
+
+  const addLog = useCallback((text: string, level: LiveLogItem['level'] = 'info') => {
+    if (!text) return
+    const key = `${level}|${text}`
+    if (lastLogKey.current === key) return
+    lastLogKey.current = key
+    logSeq.current += 1
+    setLiveLogs((list) => [...list, { id: logSeq.current, at: Date.now(), level, text }].slice(-500))
+  }, [])
+
+  const clearLogs = useCallback(() => {
+    setLiveLogs([])
+    lastLogKey.current = ''
+    progressLogAt.current.clear()
+  }, [])
 
   const dismissToast = useCallback((id: number) => {
     setToasts((list) => list.filter((t) => t.id !== id))
@@ -188,8 +217,31 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
           bump('accounts')
           void loadDashboard()
           break
+        case 'log': {
+          const e2 = e.entry
+          const level = e2.level === 'error' ? 'error' : e2.level === 'warn' ? 'warn' : 'info'
+          addLog(`[${e2.scope}] ${e2.text}`, level)
+          break
+        }
         case 'download:progress': {
           const p = e.progress
+          {
+            // 按阶段/每 10% 记录一条，避免每 300ms 刷屏
+            const prev = progressLogAt.current.get(p.attachmentId)
+            const pct = p.percent ?? 0
+            const stageChanged = !prev || prev.message !== (p.message ?? '') || p.state !== 'active'
+            const pctJump = !prev || Math.abs(pct - prev.pct) >= 10 || p.state !== 'active'
+            if (stageChanged || pctJump) {
+              progressLogAt.current.set(p.attachmentId, { pct, message: p.message ?? '' })
+              const label =
+                p.state === 'done'
+                  ? `完成 ${p.filename}`
+                  : p.state === 'failed'
+                    ? `失败 ${p.filename}：${p.message ?? ''}`
+                    : `${p.filename} ${p.percent != null ? p.percent + '%' : ''}${p.message ? ' · ' + p.message : ''}`
+              addLog(label, p.state === 'done' ? 'success' : p.state === 'failed' ? 'error' : 'info')
+            }
+          }
           setDownloads((list) => {
             const rest = list.filter((d) => d.attachmentId !== p.attachmentId)
             if (p.state === 'failed') return rest
@@ -229,6 +281,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
       rulesCount,
       toasts,
       downloads,
+      liveLogs,
+      clearLogs,
       retryDownload,
       pushToast,
       dismissToast

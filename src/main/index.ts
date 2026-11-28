@@ -9,6 +9,7 @@ import { openDb, closeDb } from './db'
 import { seedDefaultRulesIfEmpty } from './seed'
 import { registerIpc, disposeIpc, buildDashboard } from './ipc'
 import { createBackend } from './backend'
+import { setLogSink } from './log'
 import { createUpdater, getUpdateState } from './updater'
 import type { Backend } from './services'
 import type { MainEvent } from '@shared/types'
@@ -56,6 +57,9 @@ async function bootstrap(): Promise<void> {
 
   openDb()
   app.setAppUserModelId('com.mailharbor.app')
+
+  // 主进程所有模块日志镜像到渲染层「日志」弹窗（便于用户/开发者查看完整过程）
+  setLogSink((entry) => broadcast({ type: 'log', entry }))
 
   backend = createBackend({
     onEvent: (e) => {

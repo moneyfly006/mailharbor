@@ -62,7 +62,8 @@ export interface Backend {
   /** 超大附件：用户手动下载后，把选中的文件归档到规则路径（并解压） */
   archiveManualFiles(
     messageId: number,
-    files: string[]
+    files: string[],
+    onPhase?: (phase: string) => void
   ): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }>
   /** 重新识别一封「未命中/类型不符」的邮件（规则改了或软件升级后可用） */
   reprocessMessage(messageId: number): Promise<{ ok: boolean; message?: string }>

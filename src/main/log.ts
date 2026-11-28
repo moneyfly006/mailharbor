@@ -35,6 +35,21 @@ export function redact(input: string): string {
   return out
 }
 
+export interface LogEntry {
+  at: number
+  level: LogLevel
+  scope: string
+  text: string
+}
+
+type LogSink = (entry: LogEntry) => void
+let sink: LogSink | null = null
+
+/** 注册日志镜像（主进程把日志转发到渲染层的「日志」弹窗） */
+export function setLogSink(fn: LogSink | null): void {
+  sink = fn
+}
+
 export interface Logger {
   debug(msg: string, detail?: unknown): void
   info(msg: string, detail?: unknown): void
@@ -57,7 +72,15 @@ function serializeDetail(detail: unknown): string {
 export function createLogger(scope: string): Logger {
   const write = (level: LogLevel, msg: string, detail?: unknown): void => {
     if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[currentLevel]) return
-    const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] [${scope}] ${redact(msg)}${redact(serializeDetail(detail))}`
+    const safeMsg = redact(msg)
+    const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] [${scope}] ${safeMsg}${redact(serializeDetail(detail))}`
+    if (sink) {
+      try {
+        sink({ at: Date.now(), level, scope, text: safeMsg })
+      } catch {
+        /* ignore */
+      }
+    }
     if (level === 'error') console.error(line)
     else if (level === 'warn') console.warn(line)
     else console.log(line)

@@ -14,7 +14,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { aggregateDeliveries } from '../lib/delivery'
 import { ConfirmDialog } from '../components/Modal'
 import {
-  cls, driveOf, errMsg, fmtBytes, fmtDateTime, fmtNumber, mailLocal
+  cls, driveOf, errMsg, fmtBytes, fmtDateTime, fmtNumber, fmtTime, mailLocal
 } from '../lib/format'
 import { deliveryMeta, messageStatusMeta } from '../lib/status'
 import { useApp } from '../state/app-state'
@@ -596,6 +596,12 @@ export function Records(): JSX.Element {
                 </span>
                 {d.attempt > 1 ? <span className="dlp-retry">第 {d.attempt} 次尝试</span> : null}
               </div>
+              {d.message ? (
+                <div className="dlp-phase">
+                  <Icon name="refresh" size={11} />
+                  <span>{d.message}</span>
+                </div>
+              ) : null}
               <div className="dlp-bar" role="progressbar" aria-valuenow={d.percent ?? 0} aria-valuemin={0} aria-valuemax={100}>
                 <i style={{ width: `${d.percent ?? (d.received > 0 ? 8 : 3)}%` }} />
               </div>

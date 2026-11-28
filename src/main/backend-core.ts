@@ -563,8 +563,16 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
           console.log(`[big-attachment] QQ 自动归档未完成 #${row.id}: ${res?.message ?? ''}`)
         }
       } catch (e) {
-        repos.bumpMessageAutoRetry(row.id, Date.now() + 30 * 60_000)
-        console.warn('[big-attachment] QQ 自动下载异常', e instanceof Error ? e.message : String(e))
+        const m = e instanceof Error ? e.message : String(e)
+        // QQ 登录失效/链接失效：不要每 30 分钟重试一次，标记失败并提示用户重新登录
+        if (/登录|未发起下载|文件云盘|失效|过期/.test(m)) {
+          repos.updateMessageStatus(row.id, 'failed', `超大附件下载失败：${m}。请到「邮箱账户」页重新登录 QQ 网页后点「重试下载」`)
+          repos.bumpMessageAutoRetry(row.id, Date.now() + 24 * 3600_000)
+          emit({ type: 'toast', level: 'warn', title: 'QQ 网页登录可能已过期', body: '请到「邮箱账户」页点「登录 QQ 网页」重新扫码，然后点「重试下载」' })
+        } else {
+          repos.bumpMessageAutoRetry(row.id, Date.now() + 30 * 60_000)
+        }
+        console.warn('[big-attachment] QQ 自动下载异常', m)
       }
       } finally {
         bigAttachmentInFlight.delete(row.id)
@@ -877,7 +885,8 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
     },
     async archiveManualFiles(
       messageId: number,
-      files: string[]
+      files: string[],
+      onPhase?: (phase: string) => void
     ): Promise<{ ok: boolean; message?: string; archived?: number; extracted?: number }> {
       const row = repos.getMessage(messageId)
       if (!row) return { ok: false, message: '找不到这封邮件' }
@@ -890,6 +899,14 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       let archived = 0
       let extracted = 0
       const errors: string[] = []
+      const phase = (text: string): void => {
+        try {
+          onPhase?.(text)
+        } catch {
+          /* ignore */
+        }
+      }
+      phase(`正在复制到目标文件夹（${files.length} 个文件）…`)
       for (const file of files) {
         try {
           const st = statSync(file)
@@ -933,6 +950,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
         }
       }
       if (archived > 0) {
+        phase('已完成归档，正在回信…')
         repos.updateMessageStatus(messageId, archived > 0 ? 'done' : 'failed', errors.length ? errors.join('；') : null)
         repos.updateMessageReplyStatus(messageId, 'pending', null)
         emit({ type: 'delivery:changed', messageId })

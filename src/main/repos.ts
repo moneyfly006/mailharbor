@@ -769,7 +769,6 @@ export function listStuckQueuedMessages(olderThanMs: number): Array<{ id: number
     .prepare(
       `SELECT m.id, m.subject FROM messages m
        WHERE m.status='queued' AND m.updated_at < ?
-         AND EXISTS (SELECT 1 FROM attachments a WHERE a.message_id=m.id AND a.status IN ('pending','failed'))
        ORDER BY m.updated_at ASC LIMIT 50`
     )
     .all(cutoff) as Array<{ id: number; subject: string | null }>

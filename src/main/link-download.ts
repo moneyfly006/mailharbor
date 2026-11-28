@@ -11,6 +11,9 @@ import { qqFileLink, qqWebSession } from './qq-web'
 
 const log = createLogger('web-download')
 
+/** 同一封邮件同时只允许一个网页下载实例，避免多个窗口同时点击/写同一个临时文件 */
+const activeLinkedDownloads = new Set<number>()
+
 function httpsUrl(value: string): URL | null {
   const url = URL.parse(value)
   return url?.protocol === 'https:' && !url.username && !url.password ? url : null
@@ -31,6 +34,10 @@ export async function downloadLinkedFile(options: {
 }): Promise<{ path: string; filename: string } | null> {
   const url = httpsUrl(options.url)
   if (!url) throw new Error('应用内下载需要 HTTPS 链接，请用系统浏览器打开此链接')
+  if (activeLinkedDownloads.has(options.messageId)) {
+    throw new Error('这封邮件正在下载中，请等待当前下载完成（或点「取消」后再重试）')
+  }
+  activeLinkedDownloads.add(options.messageId)
   const isQq = qqFileLink(options.url)
   const background = options.background
   if (background && !isQq) throw new Error('此链接不属于 QQ 文件中转站')
@@ -101,6 +108,8 @@ export async function downloadLinkedFile(options: {
   let clickAttempts = 0
   let firstClickAt = 0
   let settled = false
+  /** 已进入多线程 Range 下载（此时 item 为 null，但下载确实在进行，不能被「90 秒未开始」误杀） */
+  let rangeActive = false
   let finishRef: ((file: { path: string; filename: string } | null, error?: Error) => void) | null = null
   let rangeDisabled = false
   const stopAutoClick = (): void => {
@@ -188,6 +197,7 @@ export async function downloadLinkedFile(options: {
       finishRef = finish
       if (settled) return
       settled = true
+      activeLinkedDownloads.delete(options.messageId)
       stopAutoClick()
       clearInterval(pageTimer)
       clearTimeout(totalTimer)
@@ -200,15 +210,18 @@ export async function downloadLinkedFile(options: {
       if (file && background) {
         try {
           const real = join(dirname(file.path), file.filename)
+          console.log(`[download] finish 重命名: ${file.path} -> ${real}`)
           if (real !== file.path) {
             if (existsSync(real)) rmSync(real, { force: true })
             renameSync(file.path, real)
             file = { ...file, path: real }
+            console.log(`[download] finish 重命名成功: ${real}`)
           }
-        } catch {
-          /* 重命名失败则保留原路径 */
+        } catch (e) {
+          console.warn('[download] finish 重命名失败（保留 .part）:', e instanceof Error ? e.message : String(e))
         }
       }
+      console.log(`[download] finish 返回 file=${file?.path ?? 'null'} error=${error?.message ?? 'none'}`)
       if (error) reject(error)
       else resolve(file)
     }
@@ -235,6 +248,7 @@ export async function downloadLinkedFile(options: {
       const totalBytes = download.getTotalBytes()
       if (background && rangeDisabled !== true && totalBytes > 8 * 1024 * 1024) {
         event.preventDefault()
+        rangeActive = true
         void (async () => {
           try {
             const cookies = await browserSession.cookies.get({ url: realUrl })
@@ -253,7 +267,7 @@ export async function downloadLinkedFile(options: {
                   filename,
                   received,
                   total,
-                  percent: total > 0 ? Math.min(99.9, Math.round((received / total) * 1000) / 10) : null,
+                  percent: total > 0 ? Math.min(100, Math.round((received / total) * 1000) / 10) : null,
                   state: 'active',
                   attempt: 1,
                   bytesPerSec: 0,
@@ -264,12 +278,14 @@ export async function downloadLinkedFile(options: {
             })
             if (ok) {
               log.info('QQ 中转站多线程下载完成', { url: realUrl.slice(0, 80), bytes: totalBytes })
+              rangeActive = false
               finish({ path: savePath, filename })
               return
             }
           } catch (e) {
             log.warn('多线程下载失败，回退浏览器下载', e instanceof Error ? e.message : String(e))
           }
+          rangeActive = false
           // 回退：标记后重新点页面下载按钮，让 Chromium 接管
           rangeDisabled = true
           try {
@@ -342,7 +358,7 @@ export async function downloadLinkedFile(options: {
     // 自动点击「下载」后，90 秒内没有触发浏览器下载 → 判定失败，避免用户以为软件卡死
     noDownloadTimer = setInterval(() => {
       if (settled) return
-      if (!item && firstClickAt && Date.now() - firstClickAt > 90_000) {
+      if (!item && !rangeActive && firstClickAt && Date.now() - firstClickAt > 90_000) {
         finish(null, new Error('自动点击「下载」后 90 秒仍未开始下载，请点「在系统浏览器打开链接」手动下载后归档'))
       }
     }, 5000)
@@ -352,9 +368,18 @@ export async function downloadLinkedFile(options: {
       let checking = false
       const start = Date.now()
       pageTimer = setInterval(() => {
-        if (settled || item || checking || win.isDestroyed()) return
+        // rangeActive：已进入多线程 Range 下载（item 为 null 但下载正在进行），不能被页面 45 秒超时误杀
+        if (settled || item || rangeActive || checking || win.isDestroyed()) return
         if (Date.now() - start > 45_000 && !win.webContents.isLoading()) {
-          finish(null, new Error('QQ 中转站未发起下载，请检查网页登录和文件有效期'))
+          // 把页面文本摘要带进错误里，便于判断是登录过期、链接失效还是页面结构变化
+          void win.webContents
+            .executeJavaScript('(() => (document.body && document.body.innerText || "").replace(/\s+/g, " ").slice(0, 180))()')
+            .then((text: string) => {
+              finish(null, new Error(`QQ 中转站未发起下载（页面提示：${text || '空白'}）`))
+            })
+            .catch(() => {
+              finish(null, new Error('QQ 中转站未发起下载，请检查网页登录和文件有效期'))
+            })
           return
         }
         if (clicked || win.webContents.isLoading() || !qqFileLink(win.webContents.getURL())) return
@@ -471,51 +496,65 @@ async function rangeDownload(opts: {
         }
         if (opts.isCancelled?.()) throw new Error('下载已取消')
         const [start, end] = range
-        // 单块 30 秒超时 + 重试：避免最后 1% 卡住
-        let res: import('node:http').IncomingMessage | null = null
+        // 关键：整个「请求 + 读数据 + 写盘」过程都带 30 秒空闲超时和重试，
+        // 防止 QQ CDN 在最后 1% 断流时 for-await 永远挂起（表现为卡在 99.9%）。
+        let done = false
         let lastErr: Error | null = null
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 3 && !done; attempt++) {
           try {
-            res = await request(`bytes=${start}-${end}`)
-            break
+            const res = await request(`bytes=${start}-${end}`)
+            if (res.statusCode !== 206) {
+              res.resume()
+              throw new Error(`分段 ${idx} 状态 ${res.statusCode}`)
+            }
+            const expected = end - start + 1
+            let written = 0
+            let offset = start
+            let lastAt = 0
+            let idleTimer: NodeJS.Timeout | undefined
+            const resetIdle = (): void => {
+              if (idleTimer) clearTimeout(idleTimer)
+              idleTimer = setTimeout(() => {
+                try {
+                  res.destroy(new Error('分段读取空闲超时（30 秒无数据）'))
+                } catch {
+                  /* ignore */
+                }
+              }, 30_000)
+            }
+            resetIdle()
+            try {
+              for await (const c of res) {
+                resetIdle()
+                const b = Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array)
+                await fh.write(b, 0, b.length, offset)
+                offset += b.length
+                written += b.length
+                received += b.length
+                const now = Date.now()
+                if (now - lastAt > 300) {
+                  lastAt = now
+                  try {
+                    opts.onProgress(received, total)
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              }
+            } finally {
+              if (idleTimer) clearTimeout(idleTimer)
+            }
+            if (written !== expected) throw new Error(`分段 ${idx} 长度不符`)
+            done = true
           } catch (e) {
             lastErr = e instanceof Error ? e : new Error(String(e))
             if (opts.isCancelled?.()) throw new Error('下载已取消')
-            await new Promise((r) => setTimeout(r, 800))
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 800))
           }
         }
-        if (!res) {
+        if (!done) {
           failed = true
-          throw lastErr ?? new Error(`分段 ${idx} 请求失败`)
-        }
-        if (res.statusCode !== 206) {
-          res.resume()
-          failed = true
-          throw new Error(`分段 ${idx} 状态 ${res.statusCode}`)
-        }
-        const expected = end - start + 1
-        let written = 0
-        let offset = start
-        let lastAt = 0
-        for await (const c of res) {
-          const b = Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array)
-          await fh.write(b, 0, b.length, offset)
-          offset += b.length
-          written += b.length
-          received += b.length
-          const now = Date.now()
-          if (now - lastAt > 300) {
-            lastAt = now
-            try {
-              opts.onProgress(received, total)
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-        if (written !== expected) {
-          failed = true
-          throw new Error(`分段 ${idx} 长度不符`)
+          throw lastErr ?? new Error(`分段 ${idx} 下载失败`)
         }
       }
     })

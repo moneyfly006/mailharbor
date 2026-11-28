@@ -388,3 +388,5 @@ export type MainEvent =
   | { type: 'update:changed'; state: UpdateState }
   | { type: 'download:progress'; progress: DownloadProgress }
   | { type: 'gmail:auth'; accountId: number; authorized: boolean; error?: string }
+  /** 主进程日志镜像（渲染层「日志」弹窗展示） */
+  | { type: 'log'; entry: { at: number; level: 'debug' | 'info' | 'warn' | 'error'; scope: string; text: string } }

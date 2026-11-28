@@ -301,8 +301,61 @@ export function registerIpc(context: IpcContext): void {
           isCancelled: () => downloadControl.isCancelled(messageId),
           onProgress: (progress) => context.broadcast({ type: 'download:progress', progress })
         })
+        console.log(`[download] downloadLinkedFile 返回: ${file?.path ?? 'null'}`)
         if (!file) return { ok: false, message: '已取消' }
-        const result = await requireBackend().archiveManualFiles(messageId, [file.path])
+        // 下载完成：立刻把进度推到 100 并提示正在归档/解压（否则复制 400MB+解压期间看起来像卡在 99.9%）
+        context.broadcast({
+          type: 'download:progress',
+          progress: {
+            messageId,
+            attachmentId: -messageId,
+            filename: file.filename,
+            received: 1,
+            total: 1,
+            percent: 100,
+            state: 'active',
+            attempt: 1,
+            bytesPerSec: 0,
+            message: '下载完成，正在归档/解压…',
+            updatedAt: Date.now()
+          }
+        })
+        console.log(`[download] 开始归档 ${file.path}`)
+        const result = await requireBackend().archiveManualFiles(messageId, [file.path], (phase) => {
+          context.broadcast({
+            type: 'download:progress',
+            progress: {
+              messageId,
+              attachmentId: -messageId,
+              filename: file.filename,
+              received: 1,
+              total: 1,
+              percent: 100,
+              state: 'active',
+              attempt: 1,
+              bytesPerSec: 0,
+              message: phase,
+              updatedAt: Date.now()
+            }
+          })
+        })
+        console.log(`[download] 归档结果: ${JSON.stringify(result)}`)
+        context.broadcast({
+          type: 'download:progress',
+          progress: {
+            messageId,
+            attachmentId: -messageId,
+            filename: file.filename,
+            received: 1,
+            total: 1,
+            percent: 100,
+            state: result.ok ? 'done' : 'failed',
+            attempt: 1,
+            bytesPerSec: 0,
+            message: result.message ?? (result.ok ? '已归档' : '归档失败'),
+            updatedAt: Date.now()
+          }
+        })
         if (!result.ok) {
           return { ...result, message: `${result.message ?? '归档未完成'}。原件已保存至系统下载目录的 MailHarbor 文件夹。` }
         }

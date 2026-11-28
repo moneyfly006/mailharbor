@@ -811,3 +811,136 @@
   border-color: var(--color-accent, #C8422D);
   color: var(--color-accent, #C8422D);
 }
+
+/* 下载进度卡片里的阶段文字：下载中 / 正在复制 / 正在解压 / 正在删除压缩包 / 已归档 */
+.dlp-phase {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0 2px;
+  font-size: 12.5px;
+  color: var(--color-accent, #C8422D);
+}
+
+.dlp-phase span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------- 实时日志 ---------------- */
+.live-log-card {
+  margin-top: var(--grid-gap, 14px);
+}
+
+.ll-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ll-hd .card-note {
+  color: var(--color-text-tertiary, #5E6873);
+}
+
+.ll-hd button {
+  margin-left: auto;
+}
+
+.ll-body {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.12));
+  border-radius: 6px;
+  background: var(--paper-050, #FCFAF4);
+  padding: 6px 10px;
+}
+
+.ll-empty {
+  padding: 14px 6px;
+  font-size: 12.5px;
+  color: var(--color-text-tertiary, #5E6873);
+}
+
+.ll-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  border-bottom: 1px dotted var(--color-rule-soft, rgba(22, 32, 43, 0.1));
+}
+
+.ll-row:last-child {
+  border-bottom: none;
+}
+
+.ll-time {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary, #7C858F);
+  font-size: 11.5px;
+  padding-top: 1px;
+}
+
+.ll-text {
+  flex: 1;
+  word-break: break-word;
+  color: var(--ink-800, #16202B);
+}
+
+.ll-success .ll-text {
+  color: var(--color-success, #2C6B4B);
+}
+
+.ll-warn .ll-text {
+  color: var(--color-warning, #96660F);
+}
+
+.ll-error .ll-text {
+  color: var(--color-danger-strong, #A8341F);
+}
+
+/* 日志弹窗放大版 */
+.ll-body-lg {
+  max-height: 78vh;
+}
+
+.ll-body-lg .ll-row {
+  font-size: 13.5px;
+  line-height: 1.65;
+  padding: 5px 2px;
+}
+
+.ll-body-lg .ll-time {
+  font-size: 12.5px;
+}
+
+.ll-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ll-filter {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.16));
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink-700, #333F4C);
+  cursor: pointer;
+}
+
+.ll-filter.is-active {
+  border-color: var(--color-accent, #C8422D);
+  color: var(--color-accent, #C8422D);
+  background: #FFF7F4;
+}
+
+.ll-tip {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary, #7C858F);
+}

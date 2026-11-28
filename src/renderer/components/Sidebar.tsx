@@ -21,6 +21,7 @@ export function Sidebar(): JSX.Element {
   const [updateState, setUpdateState] = useState<import('@shared/types').UpdateState | null>(null)
   const [updateBusy, setUpdateBusy] = useState(false)
   const [diagOpen, setDiagOpen] = useState(false)
+  const [logFilter, setLogFilter] = useState<'all' | 'warn' | 'error'>('all')
   const [diagText, setDiagText] = useState('')
 
   useEffect(() => {
@@ -52,34 +53,6 @@ export function Sidebar(): JSX.Element {
     }
   }
 
-  const buildDiagnostics = (): string => {
-    const lines = [
-      `邮箱资料助手 · 诊断信息`,
-      `时间：${new Date().toLocaleString('zh-CN')}`,
-      `版本：v${version}`,
-      `页面：${page}`,
-      `监听：${dashboard?.listening ? '中' : '已暂停'}`,
-      `概览数据：${dashboard ? '已加载' : '未加载'}${dashboardError ? `（错误：${dashboardError}）` : ''}`,
-      `账户：${dashboard?.accounts.length ?? 0} 个；规则：${rulesCount} 条`,
-      `下次检查：${dashboard?.checking ? '检查中' : '—'}`,
-      '',
-      `进行中的下载（${downloads.length}）：`
-    ]
-    if (downloads.length === 0) lines.push('  （无）')
-    for (const d of downloads.slice(0, 8)) {
-      const age = Math.round((Date.now() - d.updatedAt) / 1000)
-      lines.push(
-        `  - ${d.filename} | ${d.percent != null ? d.percent + '%' : '进度未知'} | ${(d.received / 1048576).toFixed(1)}MB${d.total > 0 ? '/' + (d.total / 1048576).toFixed(1) + 'MB' : ''} | ${age} 秒前更新 | 阶段：${d.message ?? '下载中'} | 状态：${d.state}`
-      )
-    }
-    return lines.join('\n')
-  }
-
-  const showDiagnostics = (): void => {
-    setDiagText(buildDiagnostics())
-    setDiagOpen(true)
-  }
-
   const updateLabel =
     updateState?.status === 'downloaded'
       ? `重启更新 v${updateState.availableVersion ?? ''}`
@@ -91,7 +64,7 @@ export function Sidebar(): JSX.Element {
             ? '已是最新'
             : '检查更新'
 
-  const { page, navigate, dashboard, dashboardError, rulesCount, demo, pushToast, downloads } = useApp()
+  const { page, navigate, dashboard, dashboardError, rulesCount, demo, pushToast, downloads, liveLogs, clearLogs } = useApp()
   const now = useNow()
   const listening = dashboard?.listening ?? false
   const accounts = dashboard?.accounts ?? []
@@ -166,30 +139,36 @@ export function Sidebar(): JSX.Element {
         <button type="button" className="sb-update" onClick={() => void checkUpdate()}>
           {updateBusy ? '检查中…' : updateLabel}
         </button>
-        <button type="button" className="sb-update" onClick={showDiagnostics} title="显示概览/规则加载状态，便于排查空白页">
-          诊断
+        <button type="button" className="sb-update" onClick={() => setDiagOpen(true)} title="查看实时日志（下载/归档/收信/回信/错误）">
+          日志
         </button>
       </div>
       <Modal
         open={diagOpen}
         onClose={() => setDiagOpen(false)}
-        title="诊断信息"
-        subtitle="点「复制到剪贴板」发给开发者，便于定位问题"
+        title="实时日志"
+        subtitle="下载 / 归档 / 收信 / 回信 / 错误（最多保留 500 条）"
         icon="info"
         iconTone="info"
-        width={620}
+        width={1100}
         footer={
           <>
             <Button
               size="sm"
               onClick={() => {
+                const text = liveLogs
+                  .map((l) => `[${new Date(l.at).toLocaleString('zh-CN')}] ${l.text}`)
+                  .join('\n')
                 void navigator.clipboard
-                  .writeText(diagText)
+                  .writeText(text || '（暂无日志）')
                   .then(() => pushToast('success', '已复制到剪贴板', '可以直接粘贴发给开发者'))
                   .catch(() => pushToast('warn', '复制失败', '请手动选中文字复制'))
               }}
             >
-              复制到剪贴板
+              复制日志
+            </Button>
+            <Button size="sm" variant="secondary" onClick={clearLogs}>
+              清空
             </Button>
             <Button size="sm" variant="primary" onClick={() => setDiagOpen(false)}>
               关闭
@@ -197,7 +176,35 @@ export function Sidebar(): JSX.Element {
           </>
         }
       >
-        <pre className="diag-pre">{diagText}</pre>
+        <div className="ll-toolbar">
+          {(['all', 'warn', 'error'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={logFilter === f ? 'll-filter is-active' : 'll-filter'}
+              onClick={() => setLogFilter(f)}
+            >
+              {f === 'all' ? `全部 ${liveLogs.length}` : f === 'warn' ? `警告+错误 ${liveLogs.filter((l) => l.level !== 'info').length}` : `错误 ${liveLogs.filter((l) => l.level === 'error').length}`}
+            </button>
+          ))}
+          <span className="ll-tip">最新在最上方 · 可滚动查看 · 最多 500 条</span>
+        </div>
+        <div className="ll-body ll-body-lg" style={{ height: '72vh' }}>
+          {liveLogs.length === 0 ? (
+            <div className="ll-empty">暂无日志：收到邮件、开始下载、解压归档、回信时会在这里实时显示</div>
+          ) : (
+            liveLogs
+              .filter((l) => (logFilter === 'all' ? true : logFilter === 'warn' ? l.level !== 'info' : l.level === 'error'))
+              .slice()
+              .reverse()
+              .map((l) => (
+                <div key={l.id} className={`ll-row ll-${l.level}`}>
+                  <span className="ll-time mono">{new Date(l.at).toLocaleTimeString('zh-CN')}</span>
+                  <span className="ll-text">{l.text}</span>
+                </div>
+              ))
+          )}
+        </div>
       </Modal>
 
       <div className="sb-hint">
