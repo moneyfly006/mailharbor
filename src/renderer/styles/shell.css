@@ -1772,3 +1772,19 @@ textarea.input:focus-within {
   from { background-position: -50% 0; }
   to { background-position: 150% 0; }
 }
+
+.diag-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-800, #16202B);
+  max-height: 52vh;
+  overflow: auto;
+  background: var(--paper-050, #FCFAF4);
+  border: 1px solid var(--color-rule-soft, rgba(22, 32, 43, 0.12));
+  border-radius: 6px;
+  padding: 10px 12px;
+}

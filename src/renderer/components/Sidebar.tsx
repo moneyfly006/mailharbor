@@ -1,6 +1,8 @@
 /** 左侧导航 + 底部常驻运行卡 */
 import type { JSX } from 'react'
 import { useEffect, useState } from 'react'
+import { Modal } from './Modal'
+import { Button } from './Button'
 import { cls, fmtCountdown, fmtDuration, secondsUntil } from '../lib/format'
 import { useApp, type Page } from '../state/app-state'
 import { useNow } from '../hooks/useNow'
@@ -18,6 +20,8 @@ export function Sidebar(): JSX.Element {
   const [version, setVersion] = useState('0.1.0')
   const [updateState, setUpdateState] = useState<import('@shared/types').UpdateState | null>(null)
   const [updateBusy, setUpdateBusy] = useState(false)
+  const [diagOpen, setDiagOpen] = useState(false)
+  const [diagText, setDiagText] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -48,28 +52,32 @@ export function Sidebar(): JSX.Element {
     }
   }
 
+  const buildDiagnostics = (): string => {
+    const lines = [
+      `邮箱资料助手 · 诊断信息`,
+      `时间：${new Date().toLocaleString('zh-CN')}`,
+      `版本：v${version}`,
+      `页面：${page}`,
+      `监听：${dashboard?.listening ? '中' : '已暂停'}`,
+      `概览数据：${dashboard ? '已加载' : '未加载'}${dashboardError ? `（错误：${dashboardError}）` : ''}`,
+      `账户：${dashboard?.accounts.length ?? 0} 个；规则：${rulesCount} 条`,
+      `下次检查：${dashboard?.checking ? '检查中' : '—'}`,
+      '',
+      `进行中的下载（${downloads.length}）：`
+    ]
+    if (downloads.length === 0) lines.push('  （无）')
+    for (const d of downloads.slice(0, 8)) {
+      const age = Math.round((Date.now() - d.updatedAt) / 1000)
+      lines.push(
+        `  - ${d.filename} | ${d.percent != null ? d.percent + '%' : '进度未知'} | ${(d.received / 1048576).toFixed(1)}MB${d.total > 0 ? '/' + (d.total / 1048576).toFixed(1) + 'MB' : ''} | ${age} 秒前更新 | 阶段：${d.message ?? '下载中'} | 状态：${d.state}`
+      )
+    }
+    return lines.join('\n')
+  }
+
   const showDiagnostics = (): void => {
-    const parts = [
-      `版本 v${version}`,
-      `页面 ${page}`,
-      `概览数据 ${dashboard ? '已加载' : '未加载'}`,
-      dashboardError ? `概览错误：${dashboardError}` : '',
-      `监听 ${dashboard?.listening ? '中' : '已暂停'}`,
-      `规则 ${rulesCount} 条`,
-      `账户 ${dashboard?.accounts.length ?? 0} 个`,
-      `下次检查 ${dashboard?.checking ? '检查中' : '—'}`,
-      downloads.length > 0
-        ? '下载：' +
-          downloads
-            .slice(0, 3)
-            .map((d) => {
-              const age = Math.round((Date.now() - d.updatedAt) / 1000)
-              return `${d.filename} ${d.percent != null ? d.percent + '%' : ''}（${age} 秒前更新${d.message ? '，' + d.message : ''}）`
-            })
-            .join('；')
-        : '当前没有进行中的下载'
-    ].filter(Boolean)
-    pushToast('success', '诊断信息', parts.join(' · '))
+    setDiagText(buildDiagnostics())
+    setDiagOpen(true)
   }
 
   const updateLabel =
@@ -162,6 +170,36 @@ export function Sidebar(): JSX.Element {
           诊断
         </button>
       </div>
+      <Modal
+        open={diagOpen}
+        onClose={() => setDiagOpen(false)}
+        title="诊断信息"
+        subtitle="点「复制到剪贴板」发给开发者，便于定位问题"
+        icon="info"
+        iconTone="info"
+        width={620}
+        footer={
+          <>
+            <Button
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(diagText)
+                  .then(() => pushToast('success', '已复制到剪贴板', '可以直接粘贴发给开发者'))
+                  .catch(() => pushToast('warn', '复制失败', '请手动选中文字复制'))
+              }}
+            >
+              复制到剪贴板
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => setDiagOpen(false)}>
+              关闭
+            </Button>
+          </>
+        }
+      >
+        <pre className="diag-pre">{diagText}</pre>
+      </Modal>
+
       <div className="sb-hint">
         {listening ? '关闭窗口后仍在托盘运行 · 收到邮件会提示' : '暂停期间：已在队列中的任务仍会完成'}
         {demo ? (
