@@ -280,7 +280,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
                 filename: `Google Drive 文件 ${index + 1}`,
                 received,
                 total,
-                percent: total > 0 ? Math.min(99, Math.round((received / total) * 100)) : null,
+                percent: total > 0 ? Math.min(99.9, Math.round((received / total) * 1000) / 10) : null,
                 state: 'active',
                 attempt: 1,
                 bytesPerSec: 0,

@@ -72,9 +72,25 @@ export async function downloadLinkedFile(options: {
     })
     window.webContents.setWindowOpenHandler(({ url: target }) => {
       if (!httpsUrl(target)) return { action: 'deny' }
-      return { action: 'allow', overrideBrowserWindowOptions: { parent: window, show: !background, autoHideMenuBar: true, webPreferences } }
+      // 子窗口一律后台不可见：QQ 下载页会 window.open 一个下载弹窗，
+      // 用户不希望看到空白页面，下载由 session 的 will-download 接住。
+      return { action: 'allow', overrideBrowserWindowOptions: { parent: window, show: false, autoHideMenuBar: true, webPreferences } }
     })
-    window.webContents.on('did-create-window', configure)
+    window.webContents.on('did-create-window', (child) => {
+      configure(child)
+      // 子窗口不可见；如果加载失败或长时间空白，直接销毁
+      child.webContents.on('did-fail-load', () => {
+        try { child.destroy() } catch { /* ignore */ }
+      })
+      setTimeout(() => {
+        try {
+          if (!child.isDestroyed()) {
+            const url = child.webContents.getURL()
+            if (!url || url === 'about:blank') child.destroy()
+          }
+        } catch { /* ignore */ }
+      }, 8000)
+    })
   }
   configure(win)
 
@@ -237,7 +253,7 @@ export async function downloadLinkedFile(options: {
                   filename,
                   received,
                   total,
-                  percent: total > 0 ? Math.min(99, Math.round((received / total) * 100)) : null,
+                  percent: total > 0 ? Math.min(99.9, Math.round((received / total) * 1000) / 10) : null,
                   state: 'active',
                   attempt: 1,
                   bytesPerSec: 0,
@@ -461,19 +477,29 @@ async function rangeDownload(opts: {
           failed = true
           throw new Error(`分段 ${idx} 状态 ${res.statusCode}`)
         }
-        const buf: Buffer[] = []
-        for await (const c of res) buf.push(Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array))
-        const data = Buffer.concat(buf)
-        if (data.length !== end - start + 1) {
+        const expected = end - start + 1
+        let written = 0
+        let offset = start
+        let lastAt = 0
+        for await (const c of res) {
+          const b = Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array)
+          await fh.write(b, 0, b.length, offset)
+          offset += b.length
+          written += b.length
+          received += b.length
+          const now = Date.now()
+          if (now - lastAt > 300) {
+            lastAt = now
+            try {
+              opts.onProgress(received, total)
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        if (written !== expected) {
           failed = true
           throw new Error(`分段 ${idx} 长度不符`)
-        }
-        await fh.write(data, 0, data.length, start)
-        received += data.length
-        try {
-          opts.onProgress(received, total)
-        } catch {
-          /* ignore */
         }
       }
     })

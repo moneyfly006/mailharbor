@@ -308,7 +308,20 @@ export function registerIpc(context: IpcContext): void {
         }
         return result
       } catch (e) {
-        return { ok: false, message: e instanceof Error ? e.message : String(e) }
+        const msg = e instanceof Error ? e.message : String(e)
+        // QQ 登录过期：自动打开登录窗口，用户扫码后点「重试」即可继续（下载全程后台，不弹空白页）
+        if (/登录已过期|登录QQ邮箱|请先登录/.test(msg)) {
+          const qq = repos.listAccounts().find((a) => a.preset === 'qq' && a.enabled)
+          if (qq) {
+            try {
+              await openQqLogin(qq.id, window)
+            } catch {
+              /* ignore */
+            }
+            return { ok: false, message: 'QQ 网页登录已过期，已打开登录窗口；扫码登录后点「重试」继续下载' }
+          }
+        }
+        return { ok: false, message: msg }
       } finally {
         linkArchives.delete(messageId)
       }

@@ -172,24 +172,25 @@ export class DriveDownloader {
           }
           const expected = end - start + 1
           let written = 0
-          const chunks: Buffer[] = []
+          let offset = start
+          // 边收边写边上报：进度按 300ms 节流，不再是「整块完成才跳一次」
           for await (const c of res) {
             const b = Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array)
-            chunks.push(b)
+            await fh.write(b, 0, b.length, offset)
+            offset += b.length
             written += b.length
-          }
-          if (written !== expected) throw new Error(`分段大小不符：收到 ${written}，期望 ${expected}`)
-          await fh.write(Buffer.concat(chunks), 0, written, start)
-          received += written
-          const now = Date.now()
-          if (now - lastReport > 400) {
-            lastReport = now
-            try {
-              opts.onProgress?.(received, total)
-            } catch {
-              /* ignore */
+            received += b.length
+            const now = Date.now()
+            if (now - lastReport > 300) {
+              lastReport = now
+              try {
+                opts.onProgress?.(received, total)
+              } catch {
+                /* ignore */
+              }
             }
           }
+          if (written !== expected) throw new Error(`分段大小不符：收到 ${written}，期望 ${expected}`)
         }
       })
       try {
