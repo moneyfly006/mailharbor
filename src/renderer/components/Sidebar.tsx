@@ -57,7 +57,17 @@ export function Sidebar(): JSX.Element {
       `监听 ${dashboard?.listening ? '中' : '已暂停'}`,
       `规则 ${rulesCount} 条`,
       `账户 ${dashboard?.accounts.length ?? 0} 个`,
-      `下次检查 ${dashboard?.checking ? '检查中' : '—'}`
+      `下次检查 ${dashboard?.checking ? '检查中' : '—'}`,
+      downloads.length > 0
+        ? '下载：' +
+          downloads
+            .slice(0, 3)
+            .map((d) => {
+              const age = Math.round((Date.now() - d.updatedAt) / 1000)
+              return `${d.filename} ${d.percent != null ? d.percent + '%' : ''}（${age} 秒前更新${d.message ? '，' + d.message : ''}）`
+            })
+            .join('；')
+        : '当前没有进行中的下载'
     ].filter(Boolean)
     pushToast('success', '诊断信息', parts.join(' · '))
   }
@@ -73,7 +83,7 @@ export function Sidebar(): JSX.Element {
             ? '已是最新'
             : '检查更新'
 
-  const { page, navigate, dashboard, dashboardError, rulesCount, demo, pushToast } = useApp()
+  const { page, navigate, dashboard, dashboardError, rulesCount, demo, pushToast, downloads } = useApp()
   const now = useNow()
   const listening = dashboard?.listening ?? false
   const accounts = dashboard?.accounts ?? []

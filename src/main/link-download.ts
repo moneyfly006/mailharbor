@@ -426,7 +426,7 @@ async function rangeDownload(opts: {
           path: u.pathname + u.search,
           method: 'GET',
           headers: headers(range ? { Range: range } : {}),
-          timeout: 60_000
+          timeout: 30_000
         },
         (res) => resolve(res)
       )
@@ -471,7 +471,23 @@ async function rangeDownload(opts: {
         }
         if (opts.isCancelled?.()) throw new Error('下载已取消')
         const [start, end] = range
-        const res = await request(`bytes=${start}-${end}`)
+        // 单块 30 秒超时 + 重试：避免最后 1% 卡住
+        let res: import('node:http').IncomingMessage | null = null
+        let lastErr: Error | null = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            res = await request(`bytes=${start}-${end}`)
+            break
+          } catch (e) {
+            lastErr = e instanceof Error ? e : new Error(String(e))
+            if (opts.isCancelled?.()) throw new Error('下载已取消')
+            await new Promise((r) => setTimeout(r, 800))
+          }
+        }
+        if (!res) {
+          failed = true
+          throw lastErr ?? new Error(`分段 ${idx} 请求失败`)
+        }
         if (res.statusCode !== 206) {
           res.resume()
           failed = true
