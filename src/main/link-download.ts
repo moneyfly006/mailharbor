@@ -23,6 +23,8 @@ export async function downloadLinkedFile(options: {
   accountId: number
   messageId: number
   background?: { dest: string; timeoutMs: number }
+  /** 多线程分段下载连接数（2–32），用于 QQ 中转站 CDN 加速 */
+  connections?: number
   onProgress: (progress: DownloadProgress) => void
 }): Promise<{ path: string; filename: string } | null> {
   const url = httpsUrl(options.url)
@@ -79,7 +81,10 @@ export async function downloadLinkedFile(options: {
   // 不抓真实下载链接：链接带时效签名，抓出来容易失效；点击按钮最稳。
   let clickTimer: NodeJS.Timeout | undefined
   let clickAttempts = 0
+  let firstClickAt = 0
   let settled = false
+  let finishRef: ((file: { path: string; filename: string } | null, error?: Error) => void) | null = null
+  let rangeDisabled = false
   const stopAutoClick = (): void => {
     if (clickTimer) {
       clearInterval(clickTimer)
@@ -89,6 +94,42 @@ export async function downloadLinkedFile(options: {
   const autoClickDownload = async (): Promise<void> => {
     if (win.isDestroyed() || settled) return
     try {
+      // 先拿到按钮在页面里的坐标，再用真实鼠标事件点击：
+      // 纯 JS click() 没有用户手势，Chromium 会拦截由此触发的下载。
+      const loginNeeded = (await win.webContents.executeJavaScript(
+        `(() => {
+          const t = (document.body && document.body.innerText) || '';
+          return /登录QQ邮箱|登录 QQ 邮箱|请先登录/.test(t);
+        })()`,
+        true
+      )) as boolean
+      if (loginNeeded) {
+        stopAutoClick()
+        finishRef?.(null, new Error('QQ 网页登录已过期，请到「邮箱账户」页点「登录 QQ 网页」重新扫码登录后再试'))
+        return
+      }
+      const rect = (await win.webContents.executeJavaScript(
+        `(() => {
+          const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' };
+          const nodes = [...document.querySelectorAll('a, button, [role="button"], div, span')];
+          const exact = nodes.filter((el) => visible(el) && (el.textContent || '').trim() === '下载' && el.children.length === 0);
+          const target = exact[0] || nodes.find((el) => visible(el) && (el.textContent || '').trim() === '下载');
+          if (!target) return null;
+          const r = target.getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        })()`,
+        true
+      )) as { x: number; y: number } | null
+      if (rect && rect.x > 0 && rect.y > 0) {
+        if (!firstClickAt) firstClickAt = Date.now()
+        win.webContents.sendInputEvent({ type: 'mouseMove', x: rect.x, y: rect.y })
+        win.webContents.sendInputEvent({ type: 'mouseDown', x: rect.x, y: rect.y, button: 'left', clickCount: 1 })
+        win.webContents.sendInputEvent({ type: 'mouseUp', x: rect.x, y: rect.y, button: 'left', clickCount: 1 })
+        log.info('已用真实鼠标点击页面「下载」按钮', { x: rect.x, y: rect.y })
+        clickAttempts++
+        if (clickAttempts >= 2) stopAutoClick()
+        return
+      }
       const clicked = (await win.webContents.executeJavaScript(
         `(() => {
           const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' };
@@ -101,6 +142,7 @@ export async function downloadLinkedFile(options: {
         true
       )) as boolean
       if (clicked) {
+        if (!firstClickAt) firstClickAt = Date.now()
         log.info('已自动点击页面「下载」按钮', { attempts: clickAttempts + 1 })
         clickAttempts++
         // 触发点击后停止继续点（避免重复下载）；下载事件会接住文件
@@ -123,12 +165,15 @@ export async function downloadLinkedFile(options: {
     let item: DownloadItem | null = null
     let pageTimer: NodeJS.Timeout | undefined
     let totalTimer: NodeJS.Timeout | undefined
+    let noDownloadTimer: NodeJS.Timeout | undefined
     const finish = (file: { path: string; filename: string } | null, error?: Error): void => {
+      finishRef = finish
       if (settled) return
       settled = true
       stopAutoClick()
       clearInterval(pageTimer)
       clearTimeout(totalTimer)
+      if (noDownloadTimer) clearInterval(noDownloadTimer)
       browserSession.removeListener('will-download', onDownload)
       item?.cancel()
       for (const window of windows) if (!window.isDestroyed()) window.destroy()
@@ -164,9 +209,63 @@ export async function downloadLinkedFile(options: {
         finish(null, new Error('此网页返回的文件类型无法自动归档，请使用系统浏览器下载'))
         return
       }
+      const savePath = background?.dest ?? join(app.getPath('downloads'), 'MailHarbor', randomUUID(), filename)
+
+      // 多线程分段下载：QQ 中转站的真实下载地址（gzc-dfsdown.mail.ftn.qq.com 等）通常支持 Range，
+      // 用 N 条连接并行拉取能显著提速。失败则回退 Chromium 原生下载。
+      const realUrl = actualUrl.startsWith('blob:') ? actualUrl.slice(5) : actualUrl
+      const totalBytes = download.getTotalBytes()
+      if (background && rangeDisabled !== true && totalBytes > 8 * 1024 * 1024) {
+        event.preventDefault()
+        void (async () => {
+          try {
+            const cookies = await browserSession.cookies.get({ url: realUrl })
+            const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+            const ok = await rangeDownload({
+              url: realUrl,
+              cookies: cookieHeader,
+              dest: savePath,
+              connections: Math.max(2, Math.min(32, options.connections ?? 8)),
+              onProgress: (received, total) => {
+                options.onProgress({
+                  messageId: options.messageId,
+                  attachmentId: -options.messageId,
+                  filename,
+                  received,
+                  total,
+                  percent: total > 0 ? Math.min(99, Math.round((received / total) * 100)) : null,
+                  state: 'active',
+                  attempt: 1,
+                  bytesPerSec: 0,
+                  message: `多线程下载（${Math.max(2, Math.min(32, options.connections ?? 8))} 连接）`,
+                  updatedAt: Date.now()
+                })
+              }
+            })
+            if (ok) {
+              log.info('QQ 中转站多线程下载完成', { url: realUrl.slice(0, 80), bytes: totalBytes })
+              finish({ path: savePath, filename })
+              return
+            }
+          } catch (e) {
+            log.warn('多线程下载失败，回退浏览器下载', e instanceof Error ? e.message : String(e))
+          }
+          // 回退：标记后重新点页面下载按钮，让 Chromium 接管
+          rangeDisabled = true
+          try {
+            await win.webContents.executeJavaScript(
+              `(() => { const nodes=[...document.querySelectorAll('a,button,[role="button"]')]; const t=nodes.find(el=>(el.textContent||'').trim()==='下载'); if(t){t.click(); return true} return false })()`,
+              true
+            )
+          } catch {
+            finish(null, new Error('多线程下载失败且无法回退，请在系统浏览器打开链接下载'))
+          }
+        })()
+        return
+      }
+
       item = download
       // 下载原件保留到系统下载目录，归档失败时可以直接选择该文件重试。
-      const savePath = background?.dest ?? join(app.getPath('downloads'), 'MailHarbor', randomUUID(), filename)
       download.setSavePath(savePath)
       let lastReport = 0
       let resumeAttempts = 0
@@ -220,6 +319,13 @@ export async function downloadLinkedFile(options: {
       report('active')
     }
     browserSession.on('will-download', onDownload)
+    // 自动点击「下载」后，90 秒内没有触发浏览器下载 → 判定失败，避免用户以为软件卡死
+    noDownloadTimer = setInterval(() => {
+      if (settled) return
+      if (!item && firstClickAt && Date.now() - firstClickAt > 90_000) {
+        finish(null, new Error('自动点击「下载」后 90 秒仍未开始下载，请点「在系统浏览器打开链接」手动下载后归档'))
+      }
+    }, 5000)
     if (background) {
       totalTimer = setTimeout(() => finish(null, new Error('QQ 中转站下载超时')), background.timeoutMs)
       let clicked = false
@@ -263,4 +369,115 @@ export async function downloadLinkedFile(options: {
       if (error.code !== 'ERR_ABORTED') finish(null, new Error('下载页面加载失败，请用系统浏览器打开'))
     })
   })
+}
+
+
+/**
+ * 用 HTTP Range 多线程分段下载一个直链（QQ 中转站 CDN 等）。
+ * 先探测服务器是否支持 206；不支持返回 false 由调用方回退。
+ */
+async function rangeDownload(opts: {
+  url: string
+  cookies: string
+  dest: string
+  connections: number
+  onProgress: (received: number, total: number) => void
+}): Promise<boolean> {
+  const https = await import('node:https')
+  const { open } = await import('node:fs/promises')
+  const u = new URL(opts.url)
+  if (u.protocol !== 'https:') return false
+  const conns = Math.max(2, Math.min(32, opts.connections))
+  const headers = (extra: Record<string, string> = {}): Record<string, string> => ({
+    ...(opts.cookies ? { Cookie: opts.cookies } : {}),
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36',
+    Accept: '*/*',
+    ...extra
+  })
+
+  const request = (range?: string): Promise<import('node:http').IncomingMessage> =>
+    new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          host: u.hostname,
+          port: 443,
+          path: u.pathname + u.search,
+          method: 'GET',
+          headers: headers(range ? { Range: range } : {}),
+          timeout: 60_000
+        },
+        (res) => resolve(res)
+      )
+      req.once('error', reject)
+      req.once('timeout', () => {
+        req.destroy()
+        reject(new Error('请求超时'))
+      })
+      req.end()
+    })
+
+  // 探测 Range 支持
+  const probe = await request('bytes=0-1')
+  if (probe.statusCode !== 206) {
+    probe.resume()
+    return false
+  }
+  const contentRange = String(probe.headers['content-range'] ?? '')
+  const total = Number(contentRange.split('/')[1] ?? 0)
+  probe.resume()
+  if (!total || total < 1024) return false
+
+  const chunk = Math.max(2 * 1024 * 1024, Math.ceil(total / (conns * 2)))
+  const ranges: Array<[number, number]> = []
+  for (let start = 0; start < total; start += chunk) {
+    ranges.push([start, Math.min(start + chunk, total) - 1])
+  }
+  const fh = await open(opts.dest, 'w')
+  try {
+    await fh.truncate(total)
+    let received = 0
+    let next = 0
+    let failed = false
+    const workers = Array.from({ length: Math.min(conns, ranges.length) }, async () => {
+      for (;;) {
+        const idx = next++
+        const range = ranges[idx]
+        if (!range) return
+        const [start, end] = range
+        const res = await request(`bytes=${start}-${end}`)
+        if (res.statusCode !== 206) {
+          res.resume()
+          failed = true
+          throw new Error(`分段 ${idx} 状态 ${res.statusCode}`)
+        }
+        const buf: Buffer[] = []
+        for await (const c of res) buf.push(Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array))
+        const data = Buffer.concat(buf)
+        if (data.length !== end - start + 1) {
+          failed = true
+          throw new Error(`分段 ${idx} 长度不符`)
+        }
+        await fh.write(data, 0, data.length, start)
+        received += data.length
+        try {
+          opts.onProgress(received, total)
+        } catch {
+          /* ignore */
+        }
+      }
+    })
+    try {
+      await Promise.all(workers)
+    } catch {
+      /* 失败由上层回退 */
+    }
+    try {
+      opts.onProgress(total, total)
+    } catch {
+      /* ignore */
+    }
+    return !failed && received === total
+  } finally {
+    await fh.close().catch(() => {})
+  }
 }

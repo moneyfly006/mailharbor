@@ -755,6 +755,7 @@ export const DEMO_SETTINGS: Settings = {
   downloadChunkSizeMB: 2,
   scanSpam: true,
   gmailApiAccel: true,
+  downloadConnections: 8,
   autoRetryFailed: true,
   parallelDownload: true,
   parallelConnections: 4,

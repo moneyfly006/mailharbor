@@ -357,6 +357,8 @@ export interface Settings {
   autoRetryFailed: boolean
   /** Gmail API 加速（附件走 HTTPS 下载，比 IMAP 快 3–6 倍） */
   gmailApiAccel: boolean
+  /** 超大附件（Drive / QQ 中转站）的下载连接数：2–32，越大越快（受带宽限制） */
+  downloadConnections: number
   /** 多连接并行下载（把整封邮件切段，在 N 条连接上同时取，再本地解析附件） */
   parallelDownload: boolean
   /** 并行连接数（2-8，默认 4） */

@@ -43,6 +43,7 @@ export function createBackendImpl(ctx: { bus: EventEmitter }): Backend {
           accountId: sid,
           messageId,
           url,
+          connections: Math.max(2, Math.min(32, Number(getSetting<number>('downloadConnections')) || 8)),
           background: { dest, timeoutMs: Math.max(60, Number(getSetting('downloadTimeoutSec')) || 900) * 1000 },
           onProgress: (progress) => ctx.bus.emit('event', { type: 'download:progress', progress } satisfies MainEvent)
         })

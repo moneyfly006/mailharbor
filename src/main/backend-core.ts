@@ -263,7 +263,8 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       for (const [index, id] of ids.entries()) {
         const dest = join(deps.tmpDir, `drive-${messageId}-${index}.part`)
         try {
-          const r = await client.downloadParallel(id, dest, { connections: 4, chunkBytes: 8 * 1024 * 1024, onProgress: (received, total) => {
+          const conns = Math.max(2, Math.min(32, Number(deps.getSetting<number>('downloadConnections') ?? 8)))
+          const r = await client.downloadParallel(id, dest, { connections: conns, chunkBytes: Math.floor(64 * 1024 * 1024 / conns), onProgress: (received, total) => {
             emit({
               type: 'download:progress',
               progress: {

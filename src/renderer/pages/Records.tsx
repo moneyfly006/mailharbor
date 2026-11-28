@@ -63,7 +63,7 @@ export function Records(): JSX.Element {
   const [webDownloading, setWebDownloading] = useState<number[]>([])
   const [exporting, setExporting] = useState(false)
   // 弱网/大附件：下载超时与自动重试次数（存到设置）
-  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean; gmail: boolean } | null>(null)
+  const [dlSettings, setDlSettings] = useState<{ timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean; gmail: boolean; conns: number } | null>(null)
   const [dlPanelOpen, setDlPanelOpen] = useState(false)
   const [bulkRetrying, setBulkRetrying] = useState(false)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -81,18 +81,19 @@ export function Records(): JSX.Element {
           conn: Number(s.parallelConnections ?? 4),
           spam: s.scanSpam !== false,
           autoRetry: s.autoRetryFailed !== false,
-          gmail: s.gmailApiAccel !== false
+          gmail: s.gmailApiAccel !== false,
+          conns: Number(s.downloadConnections ?? 8)
         })
       )
       .catch(() =>
         setDlSettings({
           timeoutSec: 900, attempts: 3, extract: true, chunkMB: 2, parallel: true, conn: 4,
-          spam: true, autoRetry: true, gmail: true
+          spam: true, autoRetry: true, gmail: true, conns: 8
         })
       )
   }, [api])
 
-  const saveDlSettings = async (next: { timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean; gmail: boolean }): Promise<void> => {
+  const saveDlSettings = async (next: { timeoutSec: number; attempts: number; extract: boolean; chunkMB: number; parallel: boolean; conn: number; spam: boolean; autoRetry: boolean; gmail: boolean; conns: number }): Promise<void> => {
     setDlSettings(next)
     try {
       const s = await api.settings.get()
@@ -106,7 +107,8 @@ export function Records(): JSX.Element {
         parallelConnections: next.conn,
         scanSpam: next.spam,
         autoRetryFailed: next.autoRetry,
-        gmailApiAccel: next.gmail
+        gmailApiAccel: next.gmail,
+        downloadConnections: next.conns
       })
       pushToast('success', '下载设置已保存', `超时 ${Math.round(next.timeoutSec / 60)} 分钟 · 自动重试 ${next.attempts} 次`)
     } catch (e) {
@@ -407,7 +409,24 @@ export function Records(): JSX.Element {
             </div>
 
             <div className="dls-item">
-              <span className="dls-lbl">多连接并行</span>
+              <span className="dls-lbl">超大附件线程数</span>
+            <select
+              className="dls-select"
+              value={dlSettings.conns}
+              aria-label="超大附件下载线程数"
+              onChange={(e) => void saveDlSettings({ ...dlSettings, conns: Number(e.target.value) })}
+            >
+              <option value={2}>2 线程</option>
+              <option value={4}>4 线程</option>
+              <option value={8}>8 线程（推荐）</option>
+              <option value={16}>16 线程</option>
+              <option value={32}>32 线程（极限）</option>
+            </select>
+            <span className="dls-help">实测 8 线程最优（约 3MB/s）；16/32 线程受代理与服务器限速影响，通常不会更快</span>
+          </div>
+
+          <div className="dls-item">
+            <span className="dls-lbl">多连接并行</span>
               <select
                 className="dls-select"
                 value={dlSettings.parallel ? String(dlSettings.conn) : 'off'}

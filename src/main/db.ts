@@ -134,6 +134,7 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   downloadChunkSizeMB: 2,
   scanSpam: true,
   gmailApiAccel: true,
+  downloadConnections: 8,
   autoRetryFailed: true,
   parallelDownload: true,
   parallelConnections: 4,
