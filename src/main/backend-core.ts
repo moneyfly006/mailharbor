@@ -30,6 +30,7 @@ import { resolveProxy } from './net/proxy'
 import type { TestResultLine } from '@shared/types'
 import { sendReply as smtpSendReply, buildReplyVars, renderTemplate, type ReplyRequest, type SendReplyResult } from './smtp'
 import { createLogger, setLogLevel } from './log'
+import { stat } from 'node:fs/promises'
 import type { Backend } from './services'
 import { matchRules, normalize, stripSubjectPrefix } from './rule-engine'
 
@@ -257,11 +258,53 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       if (!msg) return { ok: false, message: '找不到这封邮件' }
       const account = repos.getAccount(msg.account_id)
       if (!account) return { ok: false, message: '找不到对应邮箱账户' }
+      if (msg.status === 'done') {
+        return { ok: true, files: 0, message: '这封邮件已经归档完成，无需重复下载' }
+      }
       const client = await driveClientFor(account.id)
       if (!client) return { ok: false, message: 'Gmail 尚未授权；请到「邮箱账户」页点「重新授权」（需包含 Drive 只读权限）' }
       const ids = extractDriveFileIds(links)
       const files: string[] = []
       downloadControl.begin(messageId)
+      // 重试复用：上次已经下载好、文件还在本地 → 直接归档，不再重新下载（200MB 不用重拉）
+      // 只复用 Drive 下载产生的记录（partId 形如 drive:<id>），且每个文件只取一份，避免把历史重复记录复制成多份
+      const cached = repos
+        .listAttachmentsByMessage(messageId)
+        .filter((a) => a.status === 'downloaded' && a.tmp_path && a.part_id?.startsWith('drive:'))
+      const usable: string[] = []
+      const seenNames = new Set<string>()
+      for (const a of cached) {
+        if (a.filename && seenNames.has(a.filename)) continue
+        try {
+          if ((await stat(a.tmp_path!)).isFile()) {
+            usable.push(a.tmp_path!)
+            if (a.filename) seenNames.add(a.filename)
+          }
+        } catch {
+          /* 文件已被清理则忽略 */
+        }
+      }
+      if (usable.length > 0 && usable.length >= ids.length) {
+        emit({
+          type: 'download:progress',
+          progress: {
+            messageId,
+            attachmentId: -messageId,
+            filename: '已下载，正在归档…',
+            received: 1,
+            total: 1,
+            percent: 100,
+            state: 'active',
+            attempt: 1,
+            bytesPerSec: 0,
+            message: '复用本地已下载文件',
+            updatedAt: Date.now()
+          }
+        })
+        const res = await archiveManualRef!(messageId, usable)
+        downloadControl.clear(messageId)
+        return { ok: res.ok, files: usable.length, message: res.message }
+      }
       for (const [index, id] of ids.entries()) {
         const dest = join(deps.tmpDir, `drive-${messageId}-${index}.part`)
         try {
@@ -280,7 +323,7 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
                 filename: `Google Drive 文件 ${index + 1}`,
                 received,
                 total,
-                percent: total > 0 ? Math.min(99.9, Math.round((received / total) * 1000) / 10) : null,
+                percent: total > 0 ? Math.min(100, Math.round((received / total) * 1000) / 10) : null,
                 state: 'active',
                 attempt: 1,
                 bytesPerSec: 0,
@@ -290,6 +333,18 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
             })
           } })
           files.push(r.path)
+          // 记下已下载附件，之后「重试」可直接复用，不再重下
+          try {
+            const att = repos.upsertAttachment(messageId, {
+              partId: `drive:${id}`,
+              filename: r.filename || `drive-${index + 1}.bin`,
+              mimeType: null,
+              declaredSize: r.size
+            })
+            repos.setAttachmentDownloaded(att.id, { tmpPath: r.path, size: r.size, sha256: '' })
+          } catch {
+            /* 记录失败不影响归档 */
+          }
           emit({
             type: 'download:progress',
             progress: {
@@ -299,9 +354,10 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
               received: r.size,
               total: r.size,
               percent: 100,
-              state: 'done',
+              state: 'active',
               attempt: 1,
               bytesPerSec: 0,
+              message: '下载完成，正在归档/解压…',
               updatedAt: Date.now()
             }
           })
@@ -316,6 +372,22 @@ export function createBackendWith(deps: BackendCoreDeps): Backend {
       if (files.length === 0) return { ok: false, message: '没有可下载的 Drive 文件' }
       if (!archiveManualRef) return { ok: false, message: '归档服务未就绪' }
       const res = await archiveManualRef(messageId, files)
+      emit({
+        type: 'download:progress',
+        progress: {
+          messageId,
+          attachmentId: -messageId,
+          filename: '归档完成',
+          received: 1,
+          total: 1,
+          percent: 100,
+          state: res.ok ? 'done' : 'failed',
+          attempt: 1,
+          bytesPerSec: 0,
+          message: res.message ?? (res.ok ? '已归档' : '归档失败'),
+          updatedAt: Date.now()
+        }
+      })
       downloadControl.clear(messageId)
       return { ok: res.ok, files: files.length, message: res.message }
     }
